@@ -1299,9 +1299,9 @@ function renderItemList() {
       const sel = it.id === selectedItemId ? ' selected' : '';
       const unitName = su ? su.name : '\u2014';
       const mq = it.minSaleQty || 0;
-      // catalogueValue already represents the price of a full minimum-sale lot,
-      // so when the minimum is >1 show "N unit" (what a buyer actually purchases).
-      const unitLabel = (mq && mq !== 1) ? `${(+mq.toFixed(4))} \u00d7 ${escapeHtml(unitName)}` : escapeHtml(unitName);
+      // catalogueValue already represents the price of a full minimum-sale lot.
+      // Always show "N × unit" so the display reads consistently (e.g. "1 × bundle").
+      const unitLabel = su ? `${(+mq.toFixed(4))} \u00d7 ${escapeHtml(unitName)}` : escapeHtml(unitName);
       html += `<tr class="list-row${sel}${indented ? ' indented' : ''}" data-item-row="${it.id}">
         <td class="lr-name">${escapeHtml(it.name)}${it.isStub ? ' <span class="stub-tag">incomplete</span>' : ''}</td>
         <td class="lr-unit">${unitLabel}</td>
@@ -2436,9 +2436,7 @@ document.addEventListener('DOMContentLoaded', boot);
 <script>
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', function () {
-    navigator.serviceWorker.register('sw.js').catch(function (e) {
-      console.log('SW not registered (fine as local file):', e && e.message);
-    });
+    navigator.serviceWorker.register('sw.js').catch(function (e) { console.log('SW not registered:', e && e.message); });
   });
 }
 </script>
