@@ -949,7 +949,7 @@ function computeItem(itemId, cache, visiting) {
   }
 
   const totalCost = materialsTotal + labourTotal;
-  const itemValue = totalCost + (item.markupAmount || 0);
+  const itemValue = round4(totalCost + (item.markupAmount || 0));
 
   const su = getSaleUnit(item.saleUnitId);
   const unitType = su ? (su.type || '').toLowerCase() : '';
@@ -965,8 +965,11 @@ function computeItem(itemId, cache, visiting) {
     catalogueWeight = baseQty === 0 ? 0 : weight * (minQty / baseQty);
     catalogueValue = baseQty === 0 ? 0 : itemValue * (minQty / baseQty);
   }
+  // Round to 4dp so the displayed per-unit value is exactly what gets used
+  // when this item is a component elsewhere (values always reconcile by hand).
+  catalogueValue = round4(catalogueValue);
 
-  const result = { materialsTotal, labourTotal, totalCost, itemValue, catalogueValue, catalogueWeight, circular: anyCircular };
+  const result = { materialsTotal: round4(materialsTotal), labourTotal: round4(labourTotal), totalCost: round4(totalCost), itemValue, catalogueValue, catalogueWeight, circular: anyCircular };
   visiting.delete(itemId);
   cache.set(itemId, result);
   return result;
@@ -1046,6 +1049,10 @@ function wouldCreateCycle(parentId, candidateComponentId) {
 }
 
 /* ===================== Formatting ===================== */
+function round4(v) {
+  // Round to 4 decimal places, guarding against binary-float artefacts.
+  return Math.round((Number(v) + Number.EPSILON) * 10000) / 10000;
+}
 function fmtCurrency(v) {
   const n = Number(v) || 0;
   const sign = n < 0 ? '-' : '';
