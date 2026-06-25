@@ -1297,9 +1297,14 @@ function renderItemList() {
       const su = getSaleUnit(it.saleUnitId);
       const res = memo.get(it.id) || { catalogueValue: 0, catalogueWeight: 0 };
       const sel = it.id === selectedItemId ? ' selected' : '';
+      const unitName = su ? su.name : '\u2014';
+      const mq = it.minSaleQty || 0;
+      // catalogueValue already represents the price of a full minimum-sale lot,
+      // so when the minimum is >1 show "N unit" (what a buyer actually purchases).
+      const unitLabel = (mq && mq !== 1) ? `${(+mq.toFixed(4))} \u00d7 ${escapeHtml(unitName)}` : escapeHtml(unitName);
       html += `<tr class="list-row${sel}${indented ? ' indented' : ''}" data-item-row="${it.id}">
         <td class="lr-name">${escapeHtml(it.name)}${it.isStub ? ' <span class="stub-tag">incomplete</span>' : ''}</td>
-        <td class="lr-unit">${escapeHtml(su ? su.name : '\u2014')}</td>
+        <td class="lr-unit">${unitLabel}</td>
         <td class="num lr-value">\u20B2${(Number(res.catalogueValue) || 0).toFixed(2)}</td>
         <td class="num lr-weight">${(Number(res.catalogueWeight) || 0).toFixed(2)}</td>
       </tr>`;
@@ -2432,7 +2437,7 @@ document.addEventListener('DOMContentLoaded', boot);
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', function () {
     navigator.serviceWorker.register('sw.js').catch(function (e) {
-      console.log('Service worker not registered (fine if opened as a local file):', e && e.message);
+      console.log('SW not registered (fine as local file):', e && e.message);
     });
   });
 }

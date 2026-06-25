@@ -1,7 +1,7 @@
 /* Service worker for The Item Ledger.
    Caches the app shell so it opens offline and survives navigation/back-button.
    Bump CACHE_VERSION whenever the app files change to force a refresh. */
-const CACHE_VERSION = 'item-ledger-v2';
+const CACHE_VERSION = 'item-ledger-v3';
 const ASSETS = [
   './',
   './index.html',
