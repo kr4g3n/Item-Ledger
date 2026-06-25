@@ -1,0 +1,2434 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<title>The Item Ledger</title>
+<link rel="manifest" href="manifest.webmanifest" />
+<meta name="theme-color" content="#2b231c" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black" />
+<meta name="apple-mobile-web-app-title" content="Item Ledger" />
+<link rel="apple-touch-icon" href="icon-192.png" />
+<style>
+:root {
+  --paper: #f1e7d0;
+  --paper-dim: #e8dbb9;
+  --panel: #fbf6ea;
+  --ink: #2b231c;
+  --ink-soft: #5b4f3f;
+  --ink-faint: #8a7d68;
+  --rule: #c2ad7e;
+  --rule-light: #ddcc9e;
+  --brass: #8a6a2e;
+  --brass-bright: #a87f1f;
+  --wax: #7a2e1f;
+  --wax-bright: #9c3a26;
+  --moss: #44552f;
+  --moss-bright: #56693c;
+  --font-display: Georgia, "Iowan Old Style", "Palatino Linotype", "Book Antiqua", serif;
+  --font-body: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --radius: 6px;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  height: 100%;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-body);
+}
+
+body {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+button {
+  font-family: var(--font-body);
+  cursor: pointer;
+}
+
+input, select, textarea {
+  font-family: var(--font-body);
+  color: var(--ink);
+  background: var(--panel);
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  padding: 5px 7px;
+  font-size: 14px;
+}
+
+input:focus, select:focus, textarea:focus {
+  outline: 2px solid var(--brass-bright);
+  outline-offset: 1px;
+}
+
+input[type="number"] {
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+/* ---------- Top bar ---------- */
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 20px;
+  background: var(--ink);
+  color: var(--paper);
+  border-bottom: 3px double var(--brass);
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.topbar h1 {
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: normal;
+  letter-spacing: 0.02em;
+  margin: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.topbar h1 .mark {
+  color: #d9b65a;
+  font-size: 24px;
+}
+
+.topbar .sub {
+  font-size: 12px;
+  color: #c9bd9e;
+  margin-top: 2px;
+}
+
+.topbar-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.btn {
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  padding: 7px 13px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  background: var(--panel);
+  color: var(--ink);
+  border: 1px solid var(--rule);
+}
+
+.btn:hover { background: #fff; }
+
+.btn-ghost {
+  background: transparent;
+  color: var(--paper);
+  border: 1px solid #5a4f38;
+}
+.btn-ghost:hover { background: rgba(255,255,255,0.08); }
+
+.btn-brass { background: var(--brass); color: #fff8e8; border-color: var(--brass); }
+.btn-brass:hover { background: var(--brass-bright); }
+
+.btn-moss { background: var(--moss); color: #f3f6ec; border-color: var(--moss); }
+.btn-moss:hover { background: var(--moss-bright); }
+
+.btn-wax { background: transparent; color: var(--wax); border: 1px solid var(--wax); }
+.btn-wax:hover { background: var(--wax); color: #fff; }
+
+.btn-sm { padding: 4px 9px; font-size: 12px; }
+
+/* ---------- Layout ---------- */
+.app-body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+.sidebar {
+  width: 280px;
+  flex-shrink: 0;
+  background: var(--paper-dim);
+  border-right: 1px solid var(--rule);
+  display: flex;
+  flex-direction: column;
+}
+
+.sidebar-search {
+  padding: 12px;
+  border-bottom: 1px solid var(--rule);
+}
+.sidebar-search input { width: 100%; }
+
+.sidebar-new {
+  padding: 0 12px 12px;
+}
+.sidebar-new button { width: 100%; }
+
+.sidebar-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 6px 0 16px;
+}
+
+.sidebar-group-heading {
+  font-family: var(--font-display);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink-faint);
+  padding: 10px 14px 4px;
+}
+
+.sidebar-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  border-left: 3px solid transparent;
+  padding: 6px 14px;
+  font-size: 13.5px;
+  color: var(--ink-soft);
+}
+.sidebar-item:hover { background: rgba(0,0,0,0.04); color: var(--ink); }
+.sidebar-item.active {
+  background: var(--panel);
+  border-left-color: var(--brass);
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.main {
+  flex: 1;
+  overflow-y: auto;
+  padding: 22px 26px 60px;
+}
+
+.empty-state {
+  color: var(--ink-faint);
+  font-style: italic;
+  padding: 40px;
+  text-align: center;
+}
+
+/* ---------- Editor ---------- */
+.editor-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.item-name-input {
+  font-family: var(--font-display);
+  font-size: 26px;
+  border: none;
+  background: transparent;
+  border-bottom: 2px solid var(--rule);
+  padding: 2px 2px 4px;
+  width: 100%;
+  max-width: 480px;
+}
+.item-name-input:focus { outline: none; border-bottom-color: var(--brass-bright); }
+
+.field-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 10px 14px;
+  margin-bottom: 18px;
+  padding: 14px;
+  background: var(--panel);
+  border: 1px solid var(--rule-light);
+  border-radius: var(--radius);
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.field label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ink-faint);
+}
+.field-checkbox {
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+  justify-content: flex-start;
+  margin-top: auto;
+}
+.field-checkbox label { text-transform: none; font-size: 13px; color: var(--ink-soft); }
+
+.panels {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+@media (max-width: 760px) {
+  .panels { grid-template-columns: 1fr; }
+}
+
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--rule-light);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+}
+
+.panel-title {
+  font-family: var(--font-display);
+  font-size: 15px;
+  margin: 0 0 8px;
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+
+.grid-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.grid-table th {
+  text-align: right;
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--ink-faint);
+  border-bottom: 1px solid var(--rule);
+  padding: 3px 6px;
+  font-weight: 600;
+}
+.grid-table th:first-child, .grid-table td:first-child { text-align: left; }
+.grid-table td {
+  padding: 4px 6px;
+  border-bottom: 1px solid var(--rule-light);
+  vertical-align: middle;
+}
+.grid-table td.num, .grid-table th.num { text-align: right; font-variant-numeric: tabular-nums; }
+.grid-table input[type="number"] { width: 78px; padding: 3px 5px; font-size: 13px; }
+.row-name { color: var(--ink); }
+.row-del {
+  background: none; border: none; color: var(--wax); font-size: 15px; line-height: 1;
+  padding: 2px 4px; border-radius: 3px;
+}
+.row-del:hover { background: rgba(122,46,31,0.12); }
+
+.add-row {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.add-row select { flex: 1; min-width: 120px; }
+.add-row input[type="number"] { width: 70px; }
+.add-row-error { color: var(--wax); font-size: 12px; width: 100%; }
+
+.panel-subtotal {
+  display: flex;
+  justify-content: space-between;
+  font-size: 13px;
+  margin-top: 8px;
+  padding-top: 6px;
+  border-top: 1px solid var(--rule);
+}
+.panel-subtotal .val { font-variant-numeric: tabular-nums; font-weight: 600; }
+
+.totals-strip {
+  background: var(--ink);
+  color: var(--paper);
+  border-radius: var(--radius);
+  padding: 14px 18px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 14px;
+  margin-bottom: 18px;
+}
+.totals-strip .t-item { display: flex; flex-direction: column; gap: 2px; }
+.totals-strip .t-label {
+  font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.06em; color: #c9bd9e;
+}
+.totals-strip .t-val { font-size: 17px; font-variant-numeric: tabular-nums; }
+.totals-strip input[type="number"] {
+  background: rgba(255,255,255,0.08); border: 1px solid #5a4f38; color: var(--paper);
+  font-size: 16px; width: 100%;
+}
+.totals-strip .t-final {
+  border: 2px double #d9b65a;
+  border-radius: var(--radius);
+  padding: 6px 10px;
+}
+.totals-strip .t-final .t-val { color: #f4dd9a; font-size: 19px; font-weight: 600; }
+
+.catalogue-strip {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 14px;
+  background: var(--panel);
+  border: 1px solid var(--rule-light);
+  border-radius: var(--radius);
+  padding: 12px 16px;
+  margin-bottom: 18px;
+  font-size: 13px;
+}
+.catalogue-strip .c-label { color: var(--ink-faint); font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; }
+.catalogue-strip .c-val { font-variant-numeric: tabular-nums; font-size: 15px; color: var(--brass); font-weight: 600; }
+
+.desc-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+@media (max-width: 760px) { .desc-grid { grid-template-columns: 1fr; } }
+.desc-grid .field label { margin-bottom: 2px; }
+.desc-grid textarea { width: 100%; min-height: 90px; resize: vertical; font-size: 13px; }
+
+.flash {
+  animation: flashbg 0.6s ease-out;
+}
+@keyframes flashbg {
+  0% { background: rgba(217,182,90,0.35); }
+  100% { background: transparent; }
+}
+
+.stale-banner {
+  background: #f5e3c9;
+  border: 1px solid var(--brass);
+  border-radius: var(--radius);
+  padding: 10px 14px;
+  font-size: 13px;
+  margin-bottom: 16px;
+  color: var(--ink-soft);
+}
+
+@media (max-width: 640px) {
+  .app-body { flex-direction: column; }
+  .sidebar { width: 100%; max-height: 220px; border-right: none; border-bottom: 1px solid var(--rule); }
+  .main { padding: 16px; }
+}
+
+/* ===================== Multi-screen additions ===================== */
+.world-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 20px;
+  background: #241d17;
+  border-bottom: 1px solid #3a3026;
+  flex-wrap: wrap;
+}
+.world-bar .world-label {
+  font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: #b3a888;
+}
+.world-bar select {
+  background: #fbf6ea; min-width: 160px; font-weight: 600;
+}
+
+/* Home */
+.home-wrap { max-width: 1000px; margin: 0 auto; padding: 30px 24px 60px; }
+.home-head { margin-bottom: 24px; }
+.home-head h2 {
+  font-family: var(--font-display); font-size: 30px; font-weight: normal; margin: 0 0 4px;
+}
+.home-sub { color: var(--ink-faint); margin: 0; font-size: 14px; }
+
+.tile-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 16px;
+}
+.tile {
+  display: flex; flex-direction: column; gap: 6px; align-items: flex-start;
+  text-align: left; background: var(--panel); border: 1px solid var(--rule);
+  border-radius: var(--radius); padding: 18px 18px 16px; cursor: pointer;
+  transition: transform 0.08s ease, box-shadow 0.12s ease, border-color 0.12s ease;
+}
+.tile:hover { transform: translateY(-2px); box-shadow: 0 4px 14px rgba(43,35,28,0.14); border-color: var(--brass); }
+.tile-title { font-family: var(--font-display); font-size: 19px; color: var(--ink); }
+.tile-desc { font-size: 13px; color: var(--ink-soft); line-height: 1.4; }
+.tile-stat {
+  margin-top: 6px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em;
+  color: var(--brass); font-weight: 600;
+}
+
+.home-foot {
+  margin-top: 28px; padding-top: 18px; border-top: 1px solid var(--rule-light);
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+}
+.home-foot .btn-ghost { color: var(--ink-soft); border-color: var(--rule); }
+.home-foot .btn-ghost:hover { background: rgba(0,0,0,0.04); }
+.home-foot-note { font-size: 12px; color: var(--ink-faint); flex: 1; min-width: 220px; }
+
+/* Screen head (sub-tables + catalogue) */
+.screen-head {
+  display: flex; align-items: center; gap: 14px;
+  padding: 16px 24px; border-bottom: 1px solid var(--rule-light);
+}
+.screen-head .btn-ghost { color: var(--ink-soft); border-color: var(--rule); }
+.screen-head .btn-ghost:hover { background: rgba(0,0,0,0.04); }
+.screen-head h2 { font-family: var(--font-display); font-size: 22px; font-weight: normal; margin: 0; }
+
+.catalogue-body { display: flex; flex: 1; min-height: 0; height: calc(100vh - 165px); }
+
+.table-screen { max-width: 920px; margin: 0 auto; padding: 22px 24px 60px; }
+.screen-note { color: var(--ink-soft); font-size: 13.5px; line-height: 1.5; margin: 0 0 16px; max-width: 70ch; }
+
+.data-table { width: 100%; border-collapse: collapse; font-size: 14px; margin-bottom: 16px; background: var(--panel); border: 1px solid var(--rule-light); border-radius: var(--radius); overflow: hidden; }
+.data-table th {
+  text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em;
+  color: var(--ink-faint); padding: 9px 12px; border-bottom: 1.5px solid var(--rule); background: var(--paper-dim);
+}
+.data-table th.num, .data-table td.num { text-align: right; font-variant-numeric: tabular-nums; }
+.data-table td { padding: 8px 12px; border-bottom: 1px solid var(--rule-light); }
+.data-table tr:last-child td { border-bottom: none; }
+.dt-name { font-weight: 600; color: var(--ink); }
+.dt-used { color: var(--ink-soft); }
+.dt-actions { text-align: right; white-space: nowrap; }
+.dt-actions .btn { margin-left: 5px; }
+
+.active-pill {
+  font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em;
+  background: var(--moss); color: #f3f6ec; padding: 1px 7px; border-radius: 9px; margin-left: 6px;
+}
+
+/* Dialog */
+.dialog-overlay {
+  display: none; position: fixed; inset: 0; background: rgba(30,24,18,0.55);
+  align-items: center; justify-content: center; z-index: 100; padding: 20px;
+}
+.dialog {
+  background: var(--paper); border: 1px solid var(--brass); border-radius: var(--radius);
+  width: 100%; max-width: 420px; box-shadow: 0 18px 50px rgba(0,0,0,0.35);
+  display: flex; flex-direction: column; max-height: 90vh;
+}
+.dialog-wide { max-width: 680px; }
+.dialog-head {
+  font-family: var(--font-display); font-size: 18px; padding: 14px 18px;
+  border-bottom: 2px double var(--rule); color: var(--ink);
+}
+.dialog-body { padding: 16px 18px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; }
+.dialog-body .field { display: flex; flex-direction: column; gap: 4px; }
+.dialog-body .field label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--ink-faint); }
+.dialog-body input, .dialog-body select, .dialog-body textarea { width: 100%; }
+.dialog-body textarea { min-height: 70px; resize: vertical; }
+.dlg-hint { font-size: 12.5px; color: var(--ink-soft); line-height: 1.5; margin: 0; }
+.dialog-foot {
+  padding: 12px 18px; border-top: 1px solid var(--rule-light);
+  display: flex; justify-content: flex-end; gap: 8px;
+}
+.world-table { margin-top: 4px; }
+.world-table td { vertical-align: middle; }
+.world-add-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
+
+@media (max-width: 640px) {
+  .catalogue-body { flex-direction: column; height: auto; }
+  .catalogue-body .sidebar { width: 100%; max-height: 220px; border-right: none; border-bottom: 1px solid var(--rule); }
+  .dt-actions .btn { margin: 2px 0 2px 4px; }
+}
+
+/* ===================== List page (catalogue) ===================== */
+.list-page { max-width: 940px; margin: 0 auto; padding: 18px 24px 60px; }
+.list-toolbar {
+  display: flex; align-items: center; gap: 12px; margin-bottom: 16px; flex-wrap: wrap;
+}
+.list-search { flex: 1; min-width: 180px; }
+.list-toolbar-actions { display: flex; gap: 8px; }
+.btn:disabled { opacity: 0.45; cursor: default; }
+.btn:disabled:hover { background: var(--panel); }
+
+.list-table-wrap {
+  background: var(--panel); border: 1px solid var(--rule-light); border-radius: var(--radius); overflow: hidden;
+}
+.list-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.list-table thead th {
+  text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em;
+  color: var(--ink-faint); padding: 9px 14px; border-bottom: 1.5px solid var(--rule); background: var(--paper-dim);
+  position: sticky; top: 0;
+}
+.list-table th.num, .list-table td.num { text-align: right; font-variant-numeric: tabular-nums; }
+.list-cat-row td {
+  font-family: var(--font-display); font-size: 12.5px; text-transform: uppercase; letter-spacing: 0.07em;
+  color: var(--brass); background: var(--paper-dim); padding: 6px 14px;
+  border-bottom: 1px solid var(--rule-light); border-top: 1px solid var(--rule-light);
+}
+.list-row { cursor: pointer; }
+.list-row td { padding: 8px 14px; border-bottom: 1px solid var(--rule-light); }
+.list-row:hover td { background: rgba(138,106,46,0.06); }
+.list-row.selected td { background: rgba(138,106,46,0.16); }
+.list-row.selected .lr-name { font-weight: 600; }
+.lr-name { color: var(--ink); }
+.lr-unit { color: var(--ink-soft); }
+.lr-value { color: var(--brass); font-weight: 600; }
+
+/* ===================== Editor page ===================== */
+.editor-head-bar { justify-content: flex-start; gap: 14px; }
+.editor-head-bar h2 { flex: 1; }
+.editor-head-actions { display: flex; gap: 8px; }
+.editor-page { max-width: 1000px; margin: 0 auto; padding: 20px 24px 70px; }
+.editor-page .item-name-input { max-width: 100%; }
+
+@media (max-width: 640px) {
+  .list-toolbar { flex-direction: column; align-items: stretch; }
+  .list-toolbar-actions { justify-content: stretch; }
+  .list-toolbar-actions .btn { flex: 1; }
+  .editor-head-bar { flex-wrap: wrap; }
+  .editor-head-actions { width: 100%; }
+  .editor-head-actions .btn { flex: 1; }
+}
+
+/* ===================== Editor layout v2 ===================== */
+.desc-top { margin-bottom: 18px; }
+.field-grid-slim {
+  display: flex; align-items: flex-end; gap: 20px; flex-wrap: wrap;
+  padding: 12px 14px; margin-bottom: 18px;
+}
+.field-grid-slim .field { min-width: 180px; }
+
+.totals-block {
+  background: var(--panel); border: 1px solid var(--rule-light);
+  border-radius: var(--radius); padding: 14px; margin-bottom: 18px;
+}
+.totals-block .totals-strip { margin-bottom: 14px; }
+.sale-fields {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px 14px; padding-bottom: 14px; margin-bottom: 4px;
+  border-bottom: 1px solid var(--rule-light);
+}
+.sale-fields .field { display: flex; flex-direction: column; gap: 3px; }
+.sale-fields label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--ink-faint); }
+.totals-block .catalogue-strip { background: transparent; border: none; padding: 12px 0 0; margin: 0; }
+
+.stub-tag {
+  font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em;
+  background: #e6d3a8; color: #6b5320; padding: 1px 7px; border-radius: 9px; margin-left: 6px;
+  vertical-align: middle;
+}
+
+/* ===================== Editor layout v3 ===================== */
+/* De-highlight the totals strip inside the editor: plain, like the rest */
+.totals-block .totals-strip {
+  background: transparent;
+  color: var(--ink);
+  border: none;
+  border-radius: 0;
+  padding: 0 0 14px;
+  border-bottom: 1px solid var(--rule-light);
+}
+.totals-block .totals-strip .t-label { color: var(--ink-faint); }
+.totals-block .totals-strip .t-val { color: var(--ink); }
+.totals-block .totals-strip input[type="number"] {
+  background: var(--panel); border: 1px solid var(--rule); color: var(--ink);
+}
+.totals-block .totals-strip .t-final {
+  border: none; border-radius: 0; padding: 0;
+}
+.totals-block .totals-strip .t-final .t-val { color: var(--ink); font-weight: 700; }
+
+.desc-top-single { display: block; }
+.desc-top-single textarea { min-height: 70px; }
+.desc-bottom { display: block; margin-top: 18px; }
+.desc-bottom textarea { min-height: 90px; }
+
+/* Sale fields sit above the totals now; keep a divider under them too */
+.totals-block .sale-fields { border-top: none; padding-top: 0; }
+
+/* ===================== Collapsible list categories ===================== */
+.list-cat-row td { padding: 0; }
+.list-cat-toggle {
+  width: 100%; text-align: left; background: var(--paper-dim); border: none;
+  font-family: var(--font-display); font-size: 12.5px; text-transform: uppercase;
+  letter-spacing: 0.07em; color: var(--brass); padding: 7px 14px; cursor: pointer;
+  display: flex; align-items: center; gap: 8px;
+  border-bottom: 1px solid var(--rule-light); border-top: 1px solid var(--rule-light);
+}
+.list-cat-toggle:hover { background: #e6d8b4; }
+.list-cat-caret { display: inline-block; width: 12px; transition: transform 0.12s ease; color: var(--ink-faint); }
+.list-cat-toggle.collapsed .list-cat-caret { transform: rotate(-90deg); }
+.list-cat-count { color: var(--ink-faint); font-weight: normal; letter-spacing: 0; text-transform: none; font-size: 12px; }
+
+/* ===================== List column widths ===================== */
+/* Description takes the slack; unit/value/weight sit narrow and close together */
+.list-table th:first-child, .list-table td.lr-name { width: auto; }
+.list-table th:nth-child(2), .list-table td.lr-unit { width: 110px; white-space: nowrap; }
+.list-table th:nth-child(3), .list-table td.lr-value { width: 90px; padding-left: 6px; padding-right: 10px; }
+.list-table th:nth-child(4), .list-table td.lr-weight { width: 72px; padding-left: 6px; padding-right: 14px; }
+.list-table th:nth-child(2), .list-table th:nth-child(3), .list-table th:nth-child(4) { padding-left: 6px; }
+
+/* ===================== List: category-group tier ===================== */
+.list-group-row td { padding: 0; }
+.list-group-toggle {
+  width: 100%; text-align: left; background: var(--ink); color: var(--paper);
+  border: none; font-family: var(--font-display); font-size: 14px;
+  letter-spacing: 0.04em; padding: 9px 14px; cursor: pointer;
+  display: flex; align-items: center; gap: 8px;
+  border-bottom: 1px solid #3a3026;
+}
+.list-group-toggle:hover { background: #322a20; }
+.list-group-toggle .list-cat-caret { color: #c9bd9e; }
+.list-group-toggle.collapsed .list-cat-caret { transform: rotate(-90deg); }
+.list-group-toggle .list-cat-count { color: #c9bd9e; font-weight: normal; font-family: var(--font-body); font-size: 12px; }
+
+/* Indented (grouped) category headers and their item rows */
+.list-cat-toggle.indented { padding-left: 30px; }
+.list-row.indented .lr-name { padding-left: 28px; }
+
+</style>
+</head>
+<body>
+<header class="topbar">
+  <div>
+    <h1><span class="mark">⚖</span> The Item Ledger</h1>
+    <div class="sub">Works fully offline &middot; your data stays on this device</div>
+  </div>
+</header>
+<div class="world-bar" id="worldBar"></div>
+<div id="appRoot"></div>
+<div class="dialog-overlay" id="dialogOverlay"></div>
+<input type="file" id="importFileInput" accept="application/json,.json" style="display:none" />
+<script>
+const SEED_DATA = {"items":[{"id":1,"name":"Firewood","categoryId":2,"isMagic":false,"weightLbs":400000,"minSaleQty":2,"saleUnitId":11,"baseMeasureQty":16000,"markupAmount":0,"description":"Freshly cut or seasoned wood that can be used for fuel or heat.","craftingDescription":"One woodcutter would take about 290 days to harvest and process a coppice for firewood ( paying a teamster for an additional 21 days to haul the wood back to the logging station, and a general labourer 50 days to stack the cut wood). Producing 20,250 cubic feet of firewood.\n\n1 cubic foot weighs about 30lbs and costs 1/2cp"},{"id":2,"name":"Charcoal","categoryId":2,"isMagic":false,"weightLbs":3000,"minSaleQty":1,"saleUnitId":14,"baseMeasureQty":150,"markupAmount":0,"description":"Converted firewood that provides intense/controlled heat for crafting, and cooking.","craftingDescription":"By stacking approximately 10,000lbs of wood in a charcoal mound, a collier will produce about 3000lbs of charcoal over a period of 13.5 days from start to finish."},{"id":3,"name":"Meadow Hay","categoryId":1,"isMagic":false,"weightLbs":1600,"minSaleQty":1,"saleUnitId":10,"baseMeasureQty":80,"markupAmount":0,"description":"A mixture of native wild grasses, including fescue, orchard grass, timothy, and others.","craftingDescription":"One unskilled labourer could harvest about 1,600lbs of hay from 1 acre of meadow grass in about 6 days, including cutting, gathering, turning, bundling, stacking, and transporting."},{"id":4,"name":"Venison (deer)","categoryId":7,"isMagic":false,"weightLbs":50,"minSaleQty":5,"saleUnitId":2,"baseMeasureQty":50,"markupAmount":0,"description":"Flesh of deer/elk/moose/etc. that can be sold for food.","craftingDescription":"It takes approximately 1 day to hunt and harvest 1 deer, yielding Deer Hide, Venison and sometimes Antlers."},{"id":5,"name":"Hide - Deer","categoryId":1,"isMagic":false,"weightLbs":6,"minSaleQty":1,"saleUnitId":1,"baseMeasureQty":1,"markupAmount":0,"description":"Freshly skinned deer hide.","craftingDescription":"It takes approximately 1 day to hunt and harvest 1 deer, yielding Deer Hide, Venison and sometimes Antlers."},{"id":6,"name":"Rod - Fine (Willow - brown)","categoryId":1,"isMagic":false,"weightLbs":1300,"minSaleQty":1,"saleUnitId":10,"baseMeasureQty":520,"markupAmount":0,"description":"Also called weavers, these fine rods are sold in bundles of 100. Measuring approximately 3/16\" thick and 5ft in length, they have many uses including \u2026\nBasketry: Used for the \"belly\" or walls of baskets. Their extreme flexibility allows for tight, intricate weaving like the French Rand.\nBeehives (Skeps): The primary material for traditional coiled or woven beehives.\nFine Wattle: Used for smaller, indoor wattle-and-daub partitions where a smooth finish is required.\nArtist\u2019s Charcoal: These slender rods produce the highest quality, even-burning charcoal for sketching.\nFish Traps: Used for the internal \"funnels\" of eel and fish traps, where the gaps must be small and the weave very tight.","craftingDescription":"A willow holt requires approximately 30 days of hard labour and 6.6 days of skilled work to maintain it over the course of a year. This includes  removal of the oldest patch of willow stools and cleaning the soil in late winter, planting peas to reintroduce nitrogen to the soil while also planting new willow cuttings in last years pea patch, weeding and ditch maintenance throughour the year, harvesting the peas for personal use in the autumn, harvesting and grading the  willow rods in mid winter.\n\nWhile the basketmaker would harvest, sort, and plant new willows, they would pay a general labour to do the menial tasks such as ditch digging, weeding, and grubbing out the old stools.\n\nOver the course of 1 year, an established holt could produce about\n52,000 (1,300lbs) fine rods (weavers), sold in bundles of about  100 (2.5lbs)\n26,000 (4,160lbs) medium (stake or upright) rods, sold in bundles of 50 (8lbs)\n10,400 (5,200lbs) heavy grade (base or slath) rods, sold in bundles of 20 (10lbs)."},{"id":7,"name":"Rod - Medium (Willow - brown)","categoryId":1,"isMagic":false,"weightLbs":4160,"minSaleQty":1,"saleUnitId":10,"baseMeasureQty":520,"markupAmount":0,"description":"Also called stakes or uprights, these intermediate rods are sold in bundles of 50. Measuring approximately 1/2\" thick and 5ft in length, they have many uses including \u2026\nBasketry: These are the Stakes (uprights) that provide the vertical skeleton of the bushel. They must be stiff enough to hold a shape but flexible enough to \"kink\" at the base.\nWattle Hurdles: The standard material for weaving portable sheep fencing and garden screens.\nWattle and Daub: The horizontal \"fillers\" woven between the structural studs of timber-framed houses.\nArrow Shafts: Hand-selected for straightness, these rods are used for lightweight hunting arrows or practice shafts.\nCoracles: Used to form the woven ribs of these lightweight, skin-covered river boats.","craftingDescription":"A willow holt requires approximately 30 days of hard labour and 6.6 days of skilled work to maintain it over the course of a year. This includes  removal of the oldest patch of willow stools and cleaning the soil in late winter, planting peas to reintroduce nitrogen to the soil while also planting new willow cuttings in last years pea patch, weeding and ditch maintenance throughour the year, harvesting the peas for personal use in the autumn, harvesting and grading the  willow rods in mid winter.\n\nWhile the basketmaker would harvest, sort, and plant new willows, they would pay a general labour to do the menial tasks such as ditch digging, weeding, and grubbing out the old stools.\n\nOver the course of 1 year, an established holt could produce about\n52,000 (1,300lbs) fine rods (weavers), sold in bundles of about  100 (2.5lbs)\n26,000 (4,160lbs) medium (stake or upright) rods, sold in bundles of 50 (8lbs)\n10,400 (5,200lbs) heavy grade (base or slath) rods, sold in bundles of 20 (10lbs)."},{"id":9,"name":"Rod - Thick (Willow - brown)","categoryId":1,"isMagic":false,"weightLbs":5200,"minSaleQty":1,"saleUnitId":10,"baseMeasureQty":520,"markupAmount":0,"description":"","craftingDescription":"A willow holt requires approximately 30 days of hard labour and 6.6 days of skilled work to maintain it over the course of a year. This includes  removal of the oldest patch of willow stools and cleaning the soil in late winter, planting peas to reintroduce nitrogen to the soil while also planting new willow cuttings in last years pea patch, weeding and ditch maintenance throughour the year, harvesting the peas for personal use in the autumn, harvesting and grading the  willow rods in mid winter.\n\nWhile the basketmaker would harvest, sort, and plant new willows, they would pay a general labour to do the menial tasks such as ditch digging, weeding, and grubbing out the old stools.\n\nOver the course of 1 year, an established holt could produce about\n52,000 (1,300lbs) fine rods (weavers), sold in bundles of about  100 (2.5lbs)\n26,000 (4,160lbs) medium (stake or upright) rods, sold in bundles of 50 (8lbs)\n10,400 (5,200lbs) heavy grade (base or slath) rods, sold in bundles of 20 (10lbs)."},{"id":10,"name":"Rod - Fine (Willow - white)","categoryId":3,"isMagic":false,"weightLbs":2,"minSaleQty":1,"saleUnitId":10,"baseMeasureQty":1,"markupAmount":0,"description":"While regular \"brown\" willow was used for everyday baskets like bushels for grain. Peeled or \"white\" willow was used for more decorative basket work and religious items.\nAlso called weavers, these fine rods are sold in bundles of 100. Measuring approximately 1/8\" thick and 5ft in length.","craftingDescription":"After harvesting, willow that is intended for peeling, must be stood in 6-10 inches of water until the sap rises in the spring, once the sap has risen, it can be peeled.\nIt takes a basketmaker approximately 18-19 minutes to peel a bundle of properly pitted rods."},{"id":11,"name":"Rod - Medium (Willow - white)","categoryId":3,"isMagic":false,"weightLbs":6.5,"minSaleQty":1,"saleUnitId":1,"baseMeasureQty":1,"markupAmount":0,"description":"While regular \"brown\" willow was used for everyday baskets like bushels for grain. Peeled or \"white\" willow was used for more decorative basket work and religious items.\n\nAlso called stakes or uprights, these intermediate rods are sold in bundles of 50. Measuring approximately 7/16\" thick and 5ft in length.","craftingDescription":"After harvesting, willow that is intended for peeling, must be stood in 6-10 inches of water until the sap rises in the spring, once the sap has risen, it can be peeled.\nIt takes a basketmaker approximately 18-19 minutes to peel a bundle of properly pitted rods."},{"id":12,"name":"Rod - Thick (Willow - white)","categoryId":3,"isMagic":false,"weightLbs":8,"minSaleQty":1,"saleUnitId":1,"baseMeasureQty":1,"markupAmount":0,"description":"While regular \"brown\" willow was used for everyday baskets like bushels for grain. Peeled or \"white\" willow was used for more decorative basket work and religious items.\n\nAlso called bases/slaths, these stout rods are sold in bundles of 20. Measuring approximately 13/16\" thick and 5ft in length.","craftingDescription":"After harvesting, willow that is intended for peeling, must be stood in 6-10 inches of water until the sap rises in the spring, once the sap has risen, it can be peeled.\nIt takes a basketmaker approximately 18-19 minutes to peel a bundle of properly pitted rods."},{"id":13,"name":"Bushel - brown willow","categoryId":4,"isMagic":false,"weightLbs":10,"minSaleQty":1,"saleUnitId":1,"baseMeasureQty":1,"markupAmount":0,"description":"Basic woven basket measuring 18 inches wide at the top, 12 inches wide at the bottom, and 12 inches tall)","craftingDescription":"A skilled basketmaker can make 1 bushel in just underr 1/2 a day."},{"id":14,"name":"Seed - Grain (Oats)","categoryId":1,"isMagic":false,"weightLbs":400,"minSaleQty":1,"saleUnitId":8,"baseMeasureQty":10,"markupAmount":0,"description":"Seed of the oat plant, sold for cultivation or food.","craftingDescription":"One farmer can grow and harvest approximately 1 acre of Oats, worling approximately 20 days over the course of a year ( and paying 1 day for a teamster to plow the field)\n\nThis includes, ploughing, sowing, reaping,threshing, bundling, and transporting. With the cost of materials and labour spread equally between the two products.\n\n1 acre of Oats will yield approximately 10 bushels of Oat grain and 640lbs of straw"},{"id":15,"name":"Leather - Buckskin","categoryId":3,"isMagic":false,"weightLbs":4.8,"minSaleQty":1,"saleUnitId":5,"baseMeasureQty":12,"markupAmount":0,"description":"Tanned deer hide","craftingDescription":"Buckskin Leather is created by tanning a deer hide which takes about 9.1 days and produces approximately 4.8lbs (12 square feet) of leather for each 6lb hide."},{"id":17,"name":"Bushel - brown willow (buckskin lined)","categoryId":4,"isMagic":false,"weightLbs":13,"minSaleQty":1,"saleUnitId":1,"baseMeasureQty":1,"markupAmount":0,"description":"Regular bushel lined with buckskin leather for long term storage of seeds","craftingDescription":"It takes the basketmaker just over 3-1/2 hours to line and seal a bushel with buckskin."},{"id":18,"name":"Straw - Oat","categoryId":1,"isMagic":false,"weightLbs":1500,"minSaleQty":1,"saleUnitId":10,"baseMeasureQty":100,"markupAmount":0,"description":"The fibropus stem of the oat plant, used for:\nMattress Stuffing: Oat straw was frequently used as filling for mattresses due to its availability and cushioning properties.\nAnimal Bedding and Feed: Beyond human use, oat straw was a vital component in livestock care.\nMedicinal \"Restorative\": Herbalists and monasteries used oat straw infusions to treat \"weakness of the nerves,\" insomnia, and to boost mental capacity.\nRheumatism Treatment: It was applied topically in baths or poultices to treat rheumatism and soothe aches, pains, and skin irritations.","craftingDescription":"One farmer can grow and harvest approximately 1 acre of Oats, worling approximately 25 days over the course of a year ( and paying 1 day for a teamster to plow the \n\nThis includes, ploughing, sowing, reaping,threshing, bundling, and transporting. With the cost of materials and labour spread equally between the two products. (Oat straw requires an extra 2-1/2 days for binding and stacking).\n\n1 acre of Oats will yield approximately 10 bushels of Oat grain and 1,500lbs of straw"},{"id":19,"name":"Seed - Grain (Rye)","categoryId":1,"isMagic":false,"weightLbs":396,"minSaleQty":1,"saleUnitId":8,"baseMeasureQty":6,"markupAmount":0,"description":"The seed of the Rye plant, sold for cultivation or food.","craftingDescription":"One farmer can grow and harvest approximately 1 acre of Rye, working approximately 24 days over the course of a year. And employing a teamster for about 1day to plow the field\n\nThis includes, ploughing, sowing, reaping,threshing, bundling, and transporting. With the cost of materials and labour spread almost equally between the two products. (Rye straw requires extra time for bundling).\n\n1 acre of Rye will yield approximately 6 bushels of Wheat grain and 2,800lbs of straw"},{"id":20,"name":"Straw - Rye","categoryId":1,"isMagic":false,"weightLbs":2750,"minSaleQty":1,"saleUnitId":10,"baseMeasureQty":110,"markupAmount":0,"description":"The fibrous stems of the rye plant, used for\u2026\nThatching: Rye straw was highly favored for thatching roofs due to its length and resistance to decay, often lasting longer than other straw types.\nAnimal Bedding and Fodder: It was commonly used as clean bedding for livestock and, after being soiled, was often used in agriculture.\nHousehold Items and Crafting:\nMattresses: It was a common filling for mattresses.\nBaskets: It was used to craft durable, coiled baskets.","craftingDescription":"One farmer can grow and harvest approximately 1 acre of Rye, working approximately 24 days over the course of a year. And employing a teamster for about 1 day to plow the field.\n\nThis includes, ploughing, sowing, reaping,threshing, bundling, and transporting. With the cost of materials and labour spread almost equally between the two products (Rye straw requires an extra 3 days for binding and stacking).\n\n1 acre of Rye will yield approximately 6 bushels of Wheat grain and 2,800lbs of straw"},{"id":21,"name":"Seed - Grain (Wheat)","categoryId":1,"isMagic":false,"weightLbs":560,"minSaleQty":1,"saleUnitId":1,"baseMeasureQty":8,"markupAmount":0,"description":"Seed of the wheat plant, sold for cultivation or food.","craftingDescription":"One farmer can grow and harvest approximately 1 acre of Wheat, working approximately 20 days over the course of a year. And employing a teamster for 1 day to plaow the field.\n\nThis includes, ploughing, sowing, reaping,threshing, bundling, and transporting. With the cost of materials and labour spread equally between the two products.\n\n1 acre of Wheat will yield approximately 8 bushels of Wheat grain and 1,000lbs of straw."},{"id":22,"name":"Straw - Wheat","categoryId":1,"isMagic":false,"weightLbs":1800,"minSaleQty":1,"saleUnitId":10,"baseMeasureQty":90,"markupAmount":0,"description":"The fibrous stem of the wheat plant used for\u2026\nThatching Roofs: Long-stemmed wheat straw was a popular material for creating durable, waterproof roofs on houses and barns.\nAnimal Bedding and Fodder: Straw was commonly used as comfortable, insulating bedding for livestock and sometimes mixed with feed.\nDomestic Flooring: Straw was laid on floors in both peasant and sometimes wealthy homes to provide warmth, absorb moisture, and manage dirt, often replaced periodically.\nInsulation and Construction: It was used to make \"daub\" (a mixture of mud, straw, and dung) for wattle-and-daub wall construction.","craftingDescription":"One farmer can grow and harvest approximately 1 acre of Wheat, working approximately 20 days over the course of a year. And employing a teamster for 1 day to plaow the field.\n\nThis includes, ploughing, sowing, reaping,threshing, bundling, and transporting. with the cost of materials and labour spread equally between the two products.\n\n1 acre of Wheat will yield approximately 8 bushels of Wheat grain and 1,000lbs of straw."},{"id":23,"name":"Seed - Oilseed (Hemp)","categoryId":1,"isMagic":false,"weightLbs":495,"minSaleQty":1,"saleUnitId":8,"baseMeasureQty":9,"markupAmount":0,"description":"Seed of the hemp plant sold for cultivation or processing.","craftingDescription":"One farmer can grow and harvest approximately 1 acre of Hemp, working approximately 22 days over the course of a year ( and paying 1 day for a teamster to plow the field)\n\nThis includes ploughing,  sowing, reaping, rippling, retting, transporting, and stacking. \n\n1 acre of Hemp will yield approximately 3,000lbs of Hemp Straw, and 9 bushels of Hemp Seed, with the cost of production spread equally between the two products."},{"id":24,"name":"Straw - Hemp","categoryId":1,"isMagic":false,"weightLbs":3300,"minSaleQty":1,"saleUnitId":10,"baseMeasureQty":110,"markupAmount":0,"description":"The fibrous stem of the hemp plant, processed to become yarn.","craftingDescription":"One farmer can grow and harvest approximately 1 acre of Hemp, working approximately 22 days over the course of a year. And paying 1 day for a teamster to plow the field.\n\nThis includes ploughing,  sowing, reaping, rippling, retting, transporting, and stacking,  with the cost of production spread equally between the two products (Hemp straw requires an extra 4 days for binding and stacking).\n. \n1 acre of Hemp will yield approximately 3,300lbs of Hemp Straw, and 9 bushels of Hemp Seed."},{"id":25,"name":"Seed - Oilseed (Flax/Linseed)","categoryId":1,"isMagic":false,"weightLbs":330,"minSaleQty":1,"saleUnitId":8,"baseMeasureQty":5,"markupAmount":0,"description":"Seed of the flax plant sold for cultivation or processing.","craftingDescription":"One farmer can grow and harvest approximately 1 acre of Flax, working approximately 25 days over the course of a year ( and paying 1 day for a teamster to plow the field)\n\nThis includes ploughing,  sowing, reaping, rippling, retting, transporting, and stacking. \n\n1 acre of Flax will yield approximately 1,800lbs of Flax Straw, and 5 bushels of Flax Seed, with the cost of production spread equally between the two products."},{"id":26,"name":"Straw - Flax","categoryId":1,"isMagic":false,"weightLbs":1855,"minSaleQty":1,"saleUnitId":1,"baseMeasureQty":106,"markupAmount":0,"description":"The fibrous stem of the flax plant.","craftingDescription":"One farmer can grow and harvest approximately 1 acre of Flax, working approximately 25 days over the course of a year ( and paying 1 day for a teamster to plow the field)\n\nThis includes ploughing,  sowing, reaping, rippling, retting, transporting, and stacking, with the cost of production spread equally between the two products (Flax straw requires an extra 1-1/2 days for binding and stacking).\n\n1 acre of Flax will yield approximately 1,800lbs of Flax Straw, and 5 bushels of Flax Seed."},{"id":27,"name":"Shives - Hemp","categoryId":1,"isMagic":false,"weightLbs":2310,"minSaleQty":1,"saleUnitId":1,"baseMeasureQty":110,"markupAmount":0,"description":"Waste by product of dressing hemp straw - sold for animal bedding.","craftingDescription":"It takes about 96 days for a fibre dresser to process the yield from a 1 acre field of hemp.\n\nSince the shives make up the largest proportion of hemp processing, the bundles are sold at the cost of buying the hemp, while the cost of labour is attributed to the yarn fibre produced.\n\nThat leaves the fine (line) and coarse (tow) fibres, since the line fibres are more valuable, about 75% of the labour cost is attributed to them, and 25% to the tow."},{"id":28,"name":"Fibre - Line (Hemp)","categoryId":3,"isMagic":false,"weightLbs":500,"minSaleQty":1,"saleUnitId":10,"baseMeasureQty":20,"markupAmount":0,"description":"Processed fine hemp fibre, ready to be spun into yarn.","craftingDescription":"It takes about 96 days for a fibre dresser to process the yield from a 1 acre field of hemp.\n\nSince the shives make up the largest proportion of hemp processing, the bundles are sold at the cost of buying the hemp, while the cost of labour is attributed to the yarn fibre produced.\n\nThat leaves the fine (line) and coarse (tow) fibres, since the line fibres are more valuable, about 75% of the labour cost is attributed to them, and 25% to the tow."},{"id":29,"name":"Fibre - Tow (Hemp)","categoryId":3,"isMagic":false,"weightLbs":330,"minSaleQty":1,"saleUnitId":10,"baseMeasureQty":15,"markupAmount":0,"description":"Processed coarse hemp fibre, ready to be spun into yarn.","craftingDescription":"It takes about 96 days for a fibre dresser to process the yield from a 1 acre field of hemp.\n\nSince the shives make up the largest proportion of hemp processing, the bundles are sold at the cost of buying the hemp, while the cost of labour is attributed to the yarn fibre produced.\n\nThat leaves the fine (line) and coarse (tow) fibres, since the line fibres are more valuable, about 75% of the labour cost is attributed to them, and 25% to the tow."},{"id":30,"name":"Shives - Flax","categoryId":1,"isMagic":false,"weightLbs":1272,"minSaleQty":1,"saleUnitId":10,"baseMeasureQty":106,"markupAmount":0,"description":"Waste by product of dressing flax straw - sold for animal bedding.","craftingDescription":"It takes about 72 days for a fibre dresser to process the yield from a 1 acre field of flax.\n\nSince the shives make up the largest proportion of hemp processing, the bundles are sold at the cost of buying the hemp, while the cost of labour is attributed to the yarn fibre produced.\n\nThat leaves the fine (line) and coarse (tow) fibres, since the line fibres are more valuable, about 75% of the labour cost is attributed to them, and 25% to the tow."},{"id":31,"name":"Fibre - Line (Flax)","categoryId":3,"isMagic":false,"weightLbs":330,"minSaleQty":1,"saleUnitId":10,"baseMeasureQty":15,"markupAmount":0,"description":"Processed fine flax fibre, ready to be spun into yarn.","craftingDescription":"It takes about 72 days for a fibre dresser to process the yield from a 1 acre field of flax.\n\nSince the shives make up the largest proportion of hemp processing, the bundles are sold at the cost of buying the hemp, while the cost of labour is attributed to the yarn fibre produced.\n\nThat leaves the fine (line) and coarse (tow) fibres, since the line fibres are more valuable, about 75% of the labour cost is attributed to them, and 25% to the tow."},{"id":32,"name":"Fibre - Tow (Flax)","categoryId":3,"isMagic":false,"weightLbs":225,"minSaleQty":1,"saleUnitId":10,"baseMeasureQty":15,"markupAmount":0,"description":"Processed coarse flax fibre, ready to be spun into yarn.","craftingDescription":"It takes about 72 days for a fibre dresser to process the yield from a 1 acre field of flax.\n\nSince the shives make up the largest proportion of hemp processing, the bundles are sold at the cost of buying the hemp, while the cost of labour is attributed to the yarn fibre produced.\n\nThat leaves the fine (line) and coarse (tow) fibres, since the line fibres are more valuable, about 75% of the labour cost is attributed to them, and 25% to the tow."},{"id":33,"name":"Yarn - Fine (Flax/Linen) 2,000yds","categoryId":3,"isMagic":false,"weightLbs":21,"minSaleQty":1,"saleUnitId":12,"baseMeasureQty":21,"markupAmount":0,"description":"Fine linen thread used for fine cloth, shirts, undergarments, veils, kerchiefs, embroidery, bookbinding, sewing fine seams","craftingDescription":"It takes a spinner just over 42-1/2 days to process 1 22lb bundle of Line Flax. Yielding 21 1lb (2,000yd) skeins of fine linen yarn."},{"id":34,"name":"Yarn - Thick (Flax/Linen) 900yds","categoryId":3,"isMagic":false,"weightLbs":14,"minSaleQty":1,"saleUnitId":12,"baseMeasureQty":14,"markupAmount":0,"description":"Coarse linen yarn, used for aprons, work clothes, towels, bedding, coarse canvas, mending, wrapping, netting.","craftingDescription":"It takes a spinner just over 17-1/2 days to process a 15lb bundle of Tow Flax, yielding 14 1lb (900yd) skeins of coarse linen yarn."},{"id":35,"name":"Yarn - Medium (Hemp) 1,200yds","categoryId":3,"isMagic":false,"weightLbs":24,"minSaleQty":1,"saleUnitId":12,"baseMeasureQty":24,"markupAmount":0,"description":"Medium hemp yarn, used for sailcloth, canvas, nets, twine, bowstrings, strong sewing, harness stitching, pack straps.","craftingDescription":"It takes a spinner just under 38-1/2 days to process 1 25lb bundle of Line Hemp, yielding 24 1lb (1,200yd) skeins of medium hemp yarn."},{"id":36,"name":"Yarn - Thick (Hemp) 900yds","categoryId":3,"isMagic":false,"weightLbs":20,"minSaleQty":1,"saleUnitId":12,"baseMeasureQty":20,"markupAmount":0,"description":"Coarse hemp yarn, used for rope-making, cordage, sacks, nets, mats, oakum, packing, rough stitching, thatch/bundle ties.","craftingDescription":"It takes a spinner just under 20-1/2 days to process 1 22lb bundle of Tow Hemp, yielding 20 1lb (900yd) skeins of Coarse Hemp yarn."},{"id":37,"name":"Animal Bedding Mix","categoryId":1,"isMagic":false,"weightLbs":97.5,"minSaleQty":1,"saleUnitId":1,"baseMeasureQty":3,"markupAmount":0,"description":"A mix of various varieties of shives/straw used as bedding material for animals when kept indoors.","craftingDescription":"it takes about 1-1/2 hours to open, mix, pile and rebundle all the materials to create 3 32.5lb bundles of animal bedding."},{"id":38,"name":"Sheep - Adult","categoryId":6,"isMagic":false,"weightLbs":500,"minSaleQty":1,"saleUnitId":1,"baseMeasureQty":5,"markupAmount":0,"description":"Any sheep (ram or ewe) over 1 year old.","craftingDescription":"One herder can maintain a flock of 32 sheep, over the course of 1 year, they will employ general labour at busy times equating to approximately 20-1/4 days extra. Sheep need to be shorn 1 per year in spring, adult sheep are sold after shearing, while lambs are sold off at the end of the year, just before winter hits.\n\nMaintaining a flock of sheep over winter requires 174 32.5lb bundles of winter bedding, and 801 20lb bundles of meadow hay for winter feed. \n\n1 flock of 32 sheep produces 5 ewes and 24 lambs that the herder can sell each year while still maintaining the sixe of the flock, as well as 32 fleeces. With the annual cost of materials and labour being divided equally between the three products."},{"id":39,"name":"Sheep - Junvenille (Lamb)","categoryId":6,"isMagic":false,"weightLbs":1320,"minSaleQty":1,"saleUnitId":1,"baseMeasureQty":24,"markupAmount":0.11,"description":"Young sheep, under 1 year old.","craftingDescription":"One herder can maintain a flock of 32 sheep, over the course of 1 year, they will employ general labour at busy times equating to approximately 20-1/4 days extra. Sheep need to be shorn 1 per year in spring, adult sheep are sold after shearing, while lambs are sold off at the end of the year, just before winter hits.\n\nMaintaining a flock of sheep over winter requires 174 32.5lb bundles of winter bedding, and 801 20lb bundles of meadow hay for winter feed. \n\n1 flock of 32 sheep produces 5 ewes and 24 lambs that the herder can sell each year while still maintaining the sixe of the flock, as well as 32 fleeces. With the annual cost of materials and labour being divided equally between the three products."},{"id":40,"name":"Grease Wool","categoryId":1,"isMagic":false,"weightLbs":64,"minSaleQty":1,"saleUnitId":1,"baseMeasureQty":32,"markupAmount":0.03,"description":"Harvested from sheep to be spun into wool.","craftingDescription":"One herder can maintain a flock of 32 sheep, over the course of 1 year, they will employ general labour at busy times equating to approximately 20-1/4 days extra. Sheep need to be shorn 1 per year in spring, adult sheep are sold after shearing, while lambs are sold off at the end of the year, just before winter hits.\n\nMaintaining a flock of sheep over winter requires 174 32.5lb bundles of winter bedding, and 801 20lb bundles of meadow hay for winter feed. \n\n1 flock of 32 sheep produces 5 ewes and 24 lambs that the herder can sell each year while still maintaining the sixe of the flock, as well as 32 fleeces. With the annual cost of materials and labour being divided equally between the three products."},{"id":41,"name":"Lamb Meat","categoryId":7,"isMagic":false,"weightLbs":12.5,"minSaleQty":1,"saleUnitId":2,"baseMeasureQty":12.5,"markupAmount":0,"description":"Flesh of a young sheep, sold for consumption.","craftingDescription":"It takes a butcher about 3 hours, to process a live lamb. Spending about 1 hour each to \nkill, gut and skin the creature,\ndress, clean, trim, and part out the meat.\nChop, render, and shape fat and suet into salable amounts. \n\nYielding 12.5lbs lamb meat, 1lbs tallow, 0.5lbs suet, and 1 lambskin."},{"id":42,"name":"Tallow - Lamb","categoryId":3,"isMagic":false,"weightLbs":1,"minSaleQty":1,"saleUnitId":2,"baseMeasureQty":1,"markupAmount":0,"description":"Processed fat, sold for candles, soap, greasing, waterproofing, lamps, etc.","craftingDescription":"It takes a butcher about 3 hours, to process a live lamb. Spending about 1 hour each to \nkill, gut and skin the creature,\ndress, clean, trim, and part out the meat.\nChop, render, and shape fat and suet into salable amounts. \n\nYielding 12.5lbs lamb meat, 1lbs tallow, 0.5lbs suet, and 1 lambskin."},{"id":43,"name":"Suet - Lamb","categoryId":8,"isMagic":false,"weightLbs":0.5,"minSaleQty":1,"saleUnitId":2,"baseMeasureQty":1,"markupAmount":0,"description":"Raw kidney/organ fat, sold for cooking, etc.","craftingDescription":"It takes a butcher about 3 hours, to process a live lamb. Spending about 1 hour each to \nkill, gut and skin the creature,\ndress, clean, trim, and part out the meat.\nChop, render, and shape fat and suet into salable amounts. \n\nYielding 12.5lbs lamb meat, 1lbs tallow, 0.5lbs suet, and 1 lambskin."},{"id":44,"name":"Hide - Lambskin","categoryId":1,"isMagic":false,"weightLbs":4,"minSaleQty":1,"saleUnitId":1,"baseMeasureQty":1,"markupAmount":0,"description":"Freshly skinned hide from a lamb.","craftingDescription":"It takes a butcher about 3 hours, to process a live lamb. Spending about 1 hour each to \nkill, gut and skin the creature,\ndress, clean, trim, and part out the meat.\nChop, render, and shape fat and suet into salable amounts. \n\nYielding 12.5lbs lamb meat, 1lbs tallow, 0.5lbs suet, and 1 lambskin."},{"id":45,"name":"Hide - Sheepskin","categoryId":1,"isMagic":false,"weightLbs":7,"minSaleQty":1,"saleUnitId":1,"baseMeasureQty":1,"markupAmount":0,"description":"Freshly skinned hide from a sheep.","craftingDescription":"It takes a butcher about 4-1/2 hours, to process a live adult sheep. Spending about 1-1/2 hour each to \nkill, gut and skin the creature,\ndress, clean, trim, and part out the meat.\nChop, render, and shape fat and suet into salable amounts. \n\nYielding 60lbs Mutton, 5lbs tallow, 2.5lbs suet, and 1 sheepskin."},{"id":46,"name":"Mutton","categoryId":7,"isMagic":false,"weightLbs":60,"minSaleQty":5,"saleUnitId":2,"baseMeasureQty":60,"markupAmount":0,"description":"Flesh of an adult sheep, sold for consumption.","craftingDescription":"It takes a butcher about 4-1/2 hours, to process a live adult sheep. Spending about 1-1/2 hour each to \nkill, gut and skin the creature,\ndress, clean, trim, and part out the meat.\nChop, render, and shape fat and suet into salable amounts. \n\nYielding 60lbs Mutton, 5lbs tallow, 2.5lbs suet, and 1 sheepskin."},{"id":47,"name":"Tallow - Mutton","categoryId":3,"isMagic":false,"weightLbs":5,"minSaleQty":1,"saleUnitId":2,"baseMeasureQty":1,"markupAmount":0,"description":"Processed fat, sold for candles, soap, greasing, waterproofing, lamps, etc.","craftingDescription":"It takes a butcher about 4-1/2 hours, to process a live adult sheep. Spending about 1-1/2 hour each to \nkill, gut and skin the creature,\ndress, clean, trim, and part out the meat.\nChop, render, and shape fat and suet into salable amounts. \n\nYielding 60lbs Mutton, 5lbs tallow, 2.5lbs suet, and 1 sheepskin."},{"id":48,"name":"Suet - Mutton","categoryId":8,"isMagic":false,"weightLbs":2.5,"minSaleQty":1,"saleUnitId":2,"baseMeasureQty":2.5,"markupAmount":0,"description":"Raw kidney/organ fat, sold for cooking, etc.","craftingDescription":"It takes a butcher about 4-1/2 hours, to process a live adult sheep. Spending about 1-1/2 hour each to \nkill, gut and skin the creature,\ndress, clean, trim, and part out the meat.\nChop, render, and shape fat and suet into salable amounts. \n\nYielding 60lbs Mutton, 5lbs tallow, 2.5lbs suet, and 1 sheepskin."},{"id":49,"name":"Yarn - Thick (Wool) 1,000yds","categoryId":3,"isMagic":false,"weightLbs":1,"minSaleQty":1,"saleUnitId":1,"baseMeasureQty":1,"markupAmount":0,"description":"Coarse woollen yarn, used for Rough clot, cloaks, work garments, horse balnkets, sacks, padding, rugs, felt, and heavy blankets etc.","craftingDescription":"One spinner can produce 5 1lb skeins of wool (of variying qualities) from 5 grease wool fleeces over the course of 22 days\u2026\n\nSorting, grading, washing, drying, pickng, teasing, carding and combing take about 6 days total with (split over the 5 skeins)\nthen the spinner takes \n\n2 days to spin 1 1lb (1,000yds) thick skein,\n9 days to spin 3 1lb (1,500yds) medium skeins (3 days per skein)\n5 days to spin 1 1lb (2,500yds) fine skein."},{"id":50,"name":"Yarn - Medium (Wool) 1,500yds","categoryId":3,"isMagic":false,"weightLbs":3,"minSaleQty":1,"saleUnitId":12,"baseMeasureQty":3,"markupAmount":0,"description":"Medium woollen yarn, used for Everyday cloth, tunics, gowns, cloaks, blankets, bedding, stockings, and household textiles etc.","craftingDescription":"One spinner can produce 5 1lb skeins of wool (of variying qualities) from 5 grease wool fleeces over the course of 22 days\u2026\n\nSorting, grading, washing, drying, pickng, teasing, carding and combing take about 6 days total (split over the 5 skeins)\nthen the spinner takes \n\n2 days to spin 1 1lb (1,000yds) thick skein,\n9 days to spin 3 1lb (1,500yds) medium skeins (3 days per skein)\n5 days to spin 1 1lb (2,500yds) fine skein."},{"id":51,"name":"Yarn - Fine (Wool) 2,500yds","categoryId":3,"isMagic":false,"weightLbs":1,"minSaleQty":1,"saleUnitId":12,"baseMeasureQty":1,"markupAmount":0,"description":"Fine woollen yarn, used for Fine cloth, good clothing, hose, gloves, caps, veils, embroidery, and soft lingings etc.","craftingDescription":"One spinner can produce 5 1lb skeins of wool (of variying qualities) from 5 grease wool fleeces over the course of 22 days\u2026\n\nSorting, grading, washing, drying, pickng, teasing, carding and combing take about 6 days total with (split over the 5 skeins)\nthen the spinner takes \n\n2 days to spin 1 1lb (1,000yds) thick skein,\n9 days to spin 3 1lb (1,500yds) medium skeins (3 days per skein)\n5 days to spin 1 1lb (2,500yds) fine skein."},{"id":52,"name":"Broadcloth","categoryId":9,"isMagic":false,"weightLbs":31.5,"minSaleQty":1,"saleUnitId":5,"baseMeasureQty":150,"markupAmount":0,"description":"A dense, fulled medium-wool cloth. Warm, durable, and smooth-faced, it is used for cloaks, coats, gowns, tunics, uniforms, blankets, and other quality everyday garments.","craftingDescription":"Broadcloth is woven from medium Wool on an 66-inch loom at 24 threads per inch.\n\nIt takes 1 Weaver, approximately 0.3024 days to set up the loom.\n66 inches loom width * 24 threads per inch * 0.00015 days per warp thread = 0.2376 days.\n\nWeaving at 20 rows per minute with 24 threads per inch = 1 minute / 20 rows per minute * 24 threads per inch = 1.2 minutes per inch.\n360 inches * 1.35 = 486 inches warp length\n486 inches * 1.2 minutes = 583.2 minutes\n583.2 minutes / 600 = 0.972 days weave time.\n\nThen the fabric must be fulled (washed in boiling water, and dried to shrink it to size) this takes a just under a day and a half (1.446 days)\n\n0.2376 days setup + 0.972 days weaving + 1.446 days fulling = 2.6556 days total crafting time.\n\nUsing the formulae above we calculate \nWarp yardage: ((((360*1.35)+18)*66)*24)/36 = 22,176 yards\nWeft yardage: (((60*1.35)*(360*1.35))*24)/36 = 26,244 yards.\n22,176 + 26,244 = 48,420 total yards.\n48,420 yards / 1,500yds/lb = 32.28lbs total material weight. \n\nLoom waste = ((26.6 inches * 66 inches) * 24 threads per inch) / 36 inches = 1,170 yards \n1,170 yards / 1,500 yds/lb = 0.78lbs\n32.28lbs \u2013 0.78lbs = 31.5lbs finished item weight. \n\n10 yards (30 feet) finished length * 5 feet finished width = 150 square feet."},{"id":53,"name":"Sackcloth","categoryId":9,"isMagic":false,"weightLbs":21,"minSaleQty":5,"saleUnitId":5,"baseMeasureQty":150,"markupAmount":0,"description":"A rough, open-weave utility cloth made from coarse hemp yarn. Strong, breathable, and inexpensive, it is used for sacks, bale wrapping, packing cloth, storage bags, animal bedding covers, rough aprons, and other heavy-duty farm or trade goods.","craftingDescription":"Sackcloth is woven with Coarse Yarn on a 66\u201d inch loom at 13 threads per inch. \n\nIt takes 1 Weaver, approximately 0.1188 days to set up the loom.\n66inches loom width * 13 threads per inch * 0.00015 days per warp thread = 0.1188 days to set up the loom.\n\nWeaving at 20 rows per minute with 13 threads per inch = 1 minute / 20 threads per minute * 13 threads per inch = 0.65 minutes per inch.\n360 inches * 1.1 = 396 inches warp length\n396 inches * 0.65 minutes = 257.4 minutes.\n257.4 minutes / 600 = 0.429 days weave time.\n\nWhile sackcloth does not need fulling after weaving, it does need washing and drying, and this takes about 0.8849 days.\n\n0.1188 days loom set up + 0.429 days weave time + 0.1332 days washing and drying = 0.681 days total crafting time.\n\nWarp yardage: ((((360*1.1)+18)*66)*13)/36 = 9,867 yards \nWeft yardage: ((60*1.1)*(360*1.1)*13)/36 = 9,438 yards. \n9,867 + 9,438 = 19,305 total yards.\n19,305 yards / 900yds/lb = 21.45bs total material weight. \n\nLoom waste = ((17 inches * 66 inches) * 13 threads per inch) / 36 inches = 405.17 yards \n405.17 yards / 900yds/lb = 0.4502lbs\n21.45lbs \u2013 0.4502lbs = 21lbs \u2013 finished item weight. \n10 yards (30 feet) finished length * 5 feet finished width = 150 square feet."},{"id":54,"name":"Sailcloth","categoryId":9,"isMagic":false,"weightLbs":21.75,"minSaleQty":1,"saleUnitId":5,"baseMeasureQty":150,"markupAmount":0,"description":"Strong tightly woven medium-hemp cloth for sails, tents, awnings, wagon covers, tarps, and weather-exposed gear.","craftingDescription":"Sailcloth is woven with Medium Yarn on a 66\u201d inch loom at 18 threads per inch. \n\nIt takes 1 Weaver, approximately 0.1782 days to set up the loom.\n66inches loom width * 18 threads per inch * 0.00015 days per warp thread = 0.1782 days to set up the loom.\n\nWeaving at 20 rows per minute with 18 threads per inch = 1 minute / 20 threads per minute * 18 threads per inch = 0.9 minutes per inch.\n360 inches * 1.1 = 396 inches warp length\n396 inches * 0.9 minutes = 356.4 minutes.\n356..4 minutes / 600 = 0.594 days weave time.\n\nWhile sackcloth does not need fulling after weaving, it does need washing and drying, and this takes about 0.8916 days.\n\n0.1782 days loom set up + 0.594 days weave time + 0.4316 days washing and drying = 1.2038 days total crafting time.\n\nWarp yardage: ((((360*1.1)+18)*66)*18)/36 = 13,662 yards \nWeft yardage: ((60*1.1)*(360*1.1)*18)/36 = 13,068 yards. \n13,662yds + 13,068yds = 26,730 total yards.\n26,730yds / 1,200yds/lb = 22.275lbs total material weight. \n\nLoom waste = ((19.09 inches * 66 inches) * 18 threads per inch) / 36 inches = 630 yards \n630 yards / 1,200yds/lb = 0.525lbs\n22.275lbs \u2013 0.525lbs = 21.75lbs \u2013 finished item weight. \n10 yards (30 feet) finished length * 5 feet finished width = 150 square feet."},{"id":55,"name":"Canvas","categoryId":9,"isMagic":false,"weightLbs":19.5,"minSaleQty":1,"saleUnitId":5,"baseMeasureQty":150,"markupAmount":0,"description":"A strong, heavy utility cloth woven from hemp yarn on a 66-inch loom at 16 threads per inch. Tough and weather-resistant, it is used for packs, covers, tents, wagon sheets, work aprons, tarps, and reinforced gear.","craftingDescription":"Canvas is woven with Medium Yarn on a 66\u201d inch loom at 16 threads per inch. \n\nIt takes 1 Weaver, approximately 0.1584 days to set up the loom.\n66inches loom width * 16 threads per inch * 0.00015 days per warp thread = 0.1584 days to set up the loom.\n\nWeaving at 20 rows per minute with 16 threads per inch = 1 minute / 20 threads per minute * 16 threads per inch = 0.8 minutes per inch.\n360 inches * 1.1 = 396 inches warp length\n396 inches * 0.8 minutes = 316.8 minutes.\n316.8 minutes / 600 = 0.528 days weave time.\n\nWhile canvas does not need fulling after weaving, it does need washing and drying, and this takes about 0.8916 days.\n\n0.1584 days loom set up + 0.528 days weave time + 1.3836 days washing and drying = 2.07 days total crafting time.\n\nWarp yardage: ((((360*1.1)+18)*66)*16)/36 = 12,144 yards \nWeft yardage: ((60*1.1)*(360*1.1)*16)/36 = 11,616 yards. \n12,144yds + 11,616yds = 23,760 total yards.\n23,760yds / 1,200yds/lb = 19.8lbs total material weight. \n\nLoom waste = ((12.27 inches * 66 inches) * 16 threads per inch) / 36 inches = 359.92 yards \n528 yards / 1,200yds/lb = 0.3lbs\n19.8lbs \u2013 0.3lbs = 19.5lbs \u2013 finished item weight. \n10 yards (30 feet) finished length * 5 feet finished width = 150 square feet."},{"id":56,"name":"Linen","categoryId":9,"isMagic":false,"weightLbs":14.4,"minSaleQty":5,"saleUnitId":5,"baseMeasureQty":150,"markupAmount":0,"description":"A smooth, breathable cloth woven from fine flax yarn. Light, strong, and comfortable against the skin, it is commonly used for shirts, shifts, undergarments, veils, coifs, kerchiefs, sheets, pillowcases, towels, tablecloths, and other household textiles.","craftingDescription":"Linen is woven with Fine Yarn on a 66\u201d inch loom at 20 threads per inch.\n\nIt takes 1 Weaver, approximately 0.198 days to set up the loom.\n66 inches loom width * 20 threads per inch * 0.00015 days per warp thread = 0.198 days to set up the loom.\n\nWeaving at 20 rows per minute with 20 threads per inch = 1 minute / 20 threads per minute * 20 threads per inch = 1 minutes per inch.\n360 inches * 1.1 = 396 inches warp length.\n396 inches * 1 minutes = 396 minutes.\n396 minutes / 600 = 0.66 days weave time.\n\nWhile linen does not need fulling after weaving, it does need washing, dying and drying, and this takes about 1.828 days.\n\n0.198 days loom set up + 0.66 days weave time + 1.608days washing dying and drying = 2.466 days\n\nUsing the formulae above we calculate \nWarp yardage: ((((360*1.1)+18)*66)*20)/36 = 15,180 yards\nWeft yardage: ((60*1.1)*(360*1.1)*20)/36 = 14,520 yards.\n14,520+ 15,180 = 29700 yards \n29,700 yards / 2,000 yards per lb = 14.85lbs total material weight. \n\nLoom waste = ((24.54 inches * 66 inches) * 20 threads per inch) / 36 inches = 899.8 yards.\n899.8 yards / 2,000yds/lb = 0.45lbs \n14.85lbs \u2013 0.45lbs = 14.4lbs \u2013 finished item weight\n10 yards (30 feet) long finished length * 5 feet finished width = 150 square feet."},{"id":57,"name":"Sack","categoryId":4,"isMagic":false,"weightLbs":0.5,"minSaleQty":1,"saleUnitId":1,"baseMeasureQty":1,"markupAmount":0,"description":"Sacks are made from burlap, and have a volume of 1 cubic foot, or 1,728 cubic inches.\nAn estimate for dimensions would be 2 feet (24 inches) tall * 1 foot (12 inches) wide * 6 inches deep...","craftingDescription":"To make a 1 cubic foot sack, a sackmaker would need 7 square feet of sackcloth and about 16 feet of coarse hemp yarn.\n\nA sack maker can make about 7.6 sacks per day, or one every 78 minutes (0.131 days)."},{"id":59,"name":"Ore (Iron)","categoryId":1,"isMagic":false,"weightLbs":1,"minSaleQty":1,"saleUnitId":2,"baseMeasureQty":1,"markupAmount":0,"description":"A heavy mineral rock containing usable iron, mined from the earth and smelted in a furnace to produce bloom iron or pig iron. It is the basic raw material for making wrought iron, steel, tools, weapons, nails, fittings, armour, and other iron goods.","craftingDescription":"Iron ore is mined at the rate of 20lbs per person per day, or 1lb/30minutes.  This includes the time taken to haul the ore out of the mine and transport locally."},{"id":60,"name":"Ingot - Iron","categoryId":3,"isMagic":false,"weightLbs":40,"minSaleQty":1,"saleUnitId":1,"baseMeasureQty":40,"markupAmount":0,"description":"A small rectangular smelted iron bar measuring roughly 8 x 1 x 0.45 inches, Used as trade stock for smithing tools, nails, fittings, weapons, armour pieces, and hardware.","craftingDescription":"Iron Ingots are smelted from Iron Ore in a bloomery. The bloomery would be staffed by 4 smelters and would produce approximately 40lbs of iron ingots in 0.95 days, using 50lbs of Iron Ore, and 60lbs of Charcoal."},{"id":61,"name":"Ingot - Steel","categoryId":3,"isMagic":false,"weightLbs":25,"minSaleQty":1,"saleUnitId":1,"baseMeasureQty":25,"markupAmount":0,"description":"A small refined steel bar made from iron with controlled carbon content, and measuring 8 x 1 x 0.45 inches. Suitable for forging blades, tools, springs, fittings, armour pieces, and high-quality metalwork.","craftingDescription":"Steel Ingots take a team of 4 smelters a further 2.05 days of work, 30lbs of iron ingots, and another 60lbs of charcoal (some for heat, and some to be mixed with the metal) to produce 25lbs of steel"},{"id":62,"name":"Dagger","categoryId":10,"isMagic":false,"weightLbs":1,"minSaleQty":1,"saleUnitId":1,"baseMeasureQty":1,"markupAmount":0,"description":"A short, double-edged blade designed for close combat, utility cutting, and personal defence. Light enough to carry at the belt or boot, it is commonly used by soldiers, travellers, rogues, hunters, and townsfolk as both a weapon and a practical sidearm.","craftingDescription":"Dagger takes a competent Smith 1.84 days to craft using 1lb Steel Ingot, 40lbs charcoal, and 0.25 square feet of Buckskin Leather"},{"id":63,"name":"Iron Pyrite","categoryId":1,"isMagic":false,"weightLbs":30,"minSaleQty":30,"saleUnitId":2,"baseMeasureQty":30,"markupAmount":0,"description":"A small, exceptionally heavy parcel of unrefined mineral ore. These hand-gathered nodules are brassy-gold in color, showing a bright metallic glint when held to the light. The parcel consists of approximately15 fist-sized chunks.","craftingDescription":"Gathered by foraging along cliffsides and hills, takes about 2.5 hours to forage 30lbs of pyrite chunks"},{"id":64,"name":"Crystals - Green Vitriol (Copperas)","categoryId":3,"isMagic":false,"weightLbs":5,"minSaleQty":0.25,"saleUnitId":2,"baseMeasureQty":5,"markupAmount":0,"description":"Translucent, glass-like crystals with a striking pale, sea-green hue. \nThey form in clustered, needle-like structures or dense, crusty blocks that resemble rock candy. Also known historically as copperas or melanterite , these mineral crystals are highly sensitive to moisture. \nScribes and tanners valued them for their ability to react chemically with tannic acids, instantly turning pale liquids into rich, permanent black dyes and inks.","craftingDescription":"An alchemist can produce about 5lbs of Green Vitriol Crystals from one 30lb heap of Iron Pyrite in four batches, over the course of about 3.5 years or 42 months. Batch one takes 6 months, batch 2 9 months, batch 3 12 months and batch 4 15 months. Spending just under 21 days physically working on the production.\nThe alchemist lays out 30 lbs of raw, golden iron pyrite chunks into an open-air, clay-lined wooden trough. Over the course of 6 to 15 months, rain and oxygen slowly break the rocks down from the outside in. This weathering bleeds out a highly acidic, greenish-brown liquid that trickles down into a collection pot.\nBecause the collected liquid is far too acidic to form stable crystals, the alchemist pours it into a lead vat and tosses in 15 iron horseshoe nails. A bubbling reaction occurs as the iron digests the excess acid, perfectly neutralizing and chemical-enriching the fluid.\nThe alchemist brings the neutralized liquid to a steady, rolling boil over a roaring furnace fire for 24 continuous hours. This evaporates the water and concentrates the liquid into a dense, thick chemical syrup.\nThe piping-hot syrup is poured into large wooden tubs where strings or wooden sticks are hung. As the mixture sits undisturbed in a cool room for two weeks, beautiful sea-green vitriol crystals slowly grow along the strings. The alchemist then scrapes them off, dries them thoroughly, and wraps them in tight leather pouches to prevent them from turning into sludge."},{"id":65,"name":"Nail - Horseshoe","categoryId":11,"isMagic":false,"weightLbs":1,"minSaleQty":10,"saleUnitId":1,"baseMeasureQty":100,"markupAmount":0,"description":"These are slender, highly specialized nails featuring a distinct, flat, wedge-shaped head that fits flush into the grooves of a horseshoe. Blacksmiths hand-forged them from soft iron so they could bend easily when driven into a horse\u2019s hoof without splitting the wall.","craftingDescription":"A skilled blacksmith can hand forge a batch of nails in just under an hour. The size of the nail dictates the quantity in the batch.\nHorseshoe Nail 100/lb\nLath/Shingle Nail 80/lb\nTimber /Board Nail 50/lb"},{"id":66,"name":"Nail - Lath/Shingle","categoryId":11,"isMagic":false,"weightLbs":1,"minSaleQty":8,"saleUnitId":1,"baseMeasureQty":80,"markupAmount":0,"description":"Small, thin, and mass-produced, these everyday fasteners feature a sharp point and a wide, flat head. Carpenters and roofers used them by the thousands to pin thin wooden laths to walls (for plastering) or to secure oak shingles to roofs. Because they were thin, they could be driven into green wood rapidly without cracking the slats","craftingDescription":"A skilled blacksmith can hand forge a batch of nails in just under an hour. The size of the nail dictates the quantity in the batch.\nHorseshoe Nail 100/lb\nLath/Shingle Nail 80/lb\nTimber /Board Nail 50/lb"},{"id":67,"name":"Nail - Timber/Board","categoryId":11,"isMagic":false,"weightLbs":1,"minSaleQty":5,"saleUnitId":1,"baseMeasureQty":50,"markupAmount":0,"description":"Thick and sturdy, these square-shanked fasteners feature rough, rosehead heads hammered out with heavy blows. They were the workhorses of medieval framing, used by carpenters to fasten thick floorboards, heavy doors, and structural braces into the oak frames of houses and barns.","craftingDescription":"A skilled blacksmith can hand forge a batch of nails in just under an hour. The size of the nail dictates the quantity in the batch.\nHorseshoe Nail 100/lb\nLath/Shingle Nail 80/lb\nTimber /Board Nail 50/lb"},{"id":68,"name":"Oak Galls","categoryId":1,"isMagic":false,"weightLbs":0.5,"minSaleQty":80,"saleUnitId":1,"baseMeasureQty":80,"markupAmount":0,"description":"These strange, nut-like growths are found on oak trees. They is not part of the tree itself. Instead, they are a tiny nursery created by a harmless wasp (often called a gall wasp). The wasp lays an egg in the tree's twig or leaf. The tree gets irritated by the egg and grows a hard, round ball around it to protect itself. Inside this ball, the wasp larva eats, grows, and eventually chews its way out.\nOak galls have been prized for thousands of years because they are packed with tannin. This chemical is used to make deep black, permanent ink (called iron gall ink) and to tan leather.","craftingDescription":"It takes about 2.5 hours to gather 80 galls ( about 1/2lb)"}],"components":[{"id":2,"parentItemId":2,"componentItemId":1,"quantity":200},{"id":3,"parentItemId":10,"componentItemId":6,"quantity":1},{"id":4,"parentItemId":11,"componentItemId":7,"quantity":1},{"id":5,"parentItemId":12,"componentItemId":9,"quantity":1},{"id":6,"parentItemId":13,"componentItemId":9,"quantity":0.4},{"id":7,"parentItemId":13,"componentItemId":7,"quantity":0.5},{"id":8,"parentItemId":13,"componentItemId":6,"quantity":0.8},{"id":10,"parentItemId":14,"componentItemId":13,"quantity":10},{"id":11,"parentItemId":15,"componentItemId":5,"quantity":1},{"id":12,"parentItemId":17,"componentItemId":13,"quantity":1},{"id":13,"parentItemId":17,"componentItemId":15,"quantity":9},{"id":14,"parentItemId":14,"componentItemId":17,"quantity":2},{"id":15,"parentItemId":19,"componentItemId":13,"quantity":6},{"id":16,"parentItemId":19,"componentItemId":17,"quantity":2},{"id":17,"parentItemId":21,"componentItemId":13,"quantity":8},{"id":18,"parentItemId":21,"componentItemId":17,"quantity":2},{"id":19,"parentItemId":23,"componentItemId":13,"quantity":9},{"id":20,"parentItemId":23,"componentItemId":17,"quantity":1},{"id":21,"parentItemId":25,"componentItemId":13,"quantity":5},{"id":22,"parentItemId":25,"componentItemId":17,"quantity":1},{"id":23,"parentItemId":27,"componentItemId":24,"quantity":110},{"id":24,"parentItemId":30,"componentItemId":26,"quantity":106},{"id":25,"parentItemId":33,"componentItemId":31,"quantity":1},{"id":26,"parentItemId":34,"componentItemId":32,"quantity":1},{"id":27,"parentItemId":35,"componentItemId":28,"quantity":1},{"id":28,"parentItemId":36,"componentItemId":29,"quantity":1},{"id":29,"parentItemId":37,"componentItemId":30,"quantity":1},{"id":30,"parentItemId":37,"componentItemId":27,"quantity":1},{"id":32,"parentItemId":37,"componentItemId":18,"quantity":1},{"id":33,"parentItemId":37,"componentItemId":20,"quantity":1},{"id":34,"parentItemId":37,"componentItemId":22,"quantity":1},{"id":35,"parentItemId":38,"componentItemId":37,"quantity":58},{"id":36,"parentItemId":38,"componentItemId":3,"quantity":267},{"id":37,"parentItemId":39,"componentItemId":37,"quantity":58},{"id":38,"parentItemId":39,"componentItemId":3,"quantity":267},{"id":39,"parentItemId":40,"componentItemId":37,"quantity":58},{"id":40,"parentItemId":40,"componentItemId":3,"quantity":267},{"id":41,"parentItemId":41,"componentItemId":39,"quantity":0.33},{"id":42,"parentItemId":42,"componentItemId":39,"quantity":0.166},{"id":43,"parentItemId":43,"componentItemId":39,"quantity":0.166},{"id":44,"parentItemId":44,"componentItemId":39,"quantity":0.33},{"id":45,"parentItemId":45,"componentItemId":38,"quantity":0.33},{"id":46,"parentItemId":46,"componentItemId":38,"quantity":0.33},{"id":47,"parentItemId":47,"componentItemId":38,"quantity":0.166},{"id":48,"parentItemId":48,"componentItemId":38,"quantity":0.166},{"id":49,"parentItemId":49,"componentItemId":40,"quantity":1},{"id":50,"parentItemId":50,"componentItemId":40,"quantity":3},{"id":51,"parentItemId":51,"componentItemId":40,"quantity":1},{"id":52,"parentItemId":52,"componentItemId":50,"quantity":32.28},{"id":53,"parentItemId":53,"componentItemId":36,"quantity":21.45},{"id":55,"parentItemId":54,"componentItemId":35,"quantity":22.275},{"id":56,"parentItemId":55,"componentItemId":35,"quantity":19.8},{"id":57,"parentItemId":56,"componentItemId":33,"quantity":14.85},{"id":58,"parentItemId":57,"componentItemId":53,"quantity":1.2},{"id":61,"parentItemId":57,"componentItemId":36,"quantity":0.0355},{"id":64,"parentItemId":60,"componentItemId":59,"quantity":50},{"id":66,"parentItemId":61,"componentItemId":60,"quantity":30},{"id":68,"parentItemId":2,"componentItemId":57,"quantity":150},{"id":69,"parentItemId":60,"componentItemId":2,"quantity":3},{"id":70,"parentItemId":61,"componentItemId":2,"quantity":3},{"id":71,"parentItemId":62,"componentItemId":61,"quantity":1},{"id":72,"parentItemId":62,"componentItemId":2,"quantity":2},{"id":73,"parentItemId":62,"componentItemId":15,"quantity":0.25},{"id":74,"parentItemId":64,"componentItemId":63,"quantity":30},{"id":75,"parentItemId":65,"componentItemId":60,"quantity":1},{"id":76,"parentItemId":65,"componentItemId":2,"quantity":0.25},{"id":77,"parentItemId":66,"componentItemId":60,"quantity":1},{"id":78,"parentItemId":66,"componentItemId":2,"quantity":0.25},{"id":79,"parentItemId":67,"componentItemId":60,"quantity":1},{"id":80,"parentItemId":67,"componentItemId":2,"quantity":0.25},{"id":81,"parentItemId":64,"componentItemId":65,"quantity":60}],"professions":[{"id":1,"name":"Woodcutter","skillLevelId":2,"description":"Works a coppice of trees for the sole purpose of producing firewood."},{"id":2,"name":"Collier","skillLevelId":3,"description":"Converts firewood into charcoal"},{"id":3,"name":"General Labourer","skillLevelId":1,"description":"Usually a peasant, normally employed by the day during busy times, may be an itenerant worker travelling where the seasons create extra work."},{"id":4,"name":"Hunter","skillLevelId":2,"description":"Tracks and kills wild game to sell meat, hides, and bones/horns/antlers"},{"id":5,"name":"Herder","skillLevelId":2,"description":"Keeper of livestock animals such as sheep, pigs, cattle etc."},{"id":6,"name":"Basketmaker","skillLevelId":3,"description":"Weaver of baskets, also maintains their own willow holt to provide materials to weave."},{"id":7,"name":"Teamster","skillLevelId":3,"description":"Drives a team of draft animals (mules/horses/oxen etc) to pull wagons or haul items."},{"id":8,"name":"Farmer","skillLevelId":1,"description":"Grows crops or raises animals to provide food and materials."},{"id":9,"name":"Tanner","skillLevelId":2,"description":"Converts hides into leather"},{"id":10,"name":"Fibre Dresser","skillLevelId":2,"description":"Processes plant fibres to prepare for spinning"},{"id":11,"name":"Spinner","skillLevelId":2,"description":"Processes fibres such as hemp, flax, wool etc into yarn."},{"id":12,"name":"Butcher","skillLevelId":3,"description":"Specialises in slaughter, dressing and selling animal flesh."},{"id":13,"name":"Weaver","skillLevelId":3,"description":"Makes fabric from yarn"},{"id":14,"name":"Sackmaker","skillLevelId":2,"description":"Crafts sacks and bags from rough cloth"},{"id":15,"name":"Miner","skillLevelId":2,"description":"Harvests ore and gems from the ground"},{"id":16,"name":"Smelter","skillLevelId":3,"description":"A skilled furnace worker who converts ore into usable metal by heating it with charcoal in a bloomery, furnace, or smelting hearth. The smelter prepares ore and fuel, controls furnace heat and airflow, removes slag, and produces raw metal blooms, billets, or ingots for smiths and metalworkers."},{"id":17,"name":"Weaponsmith","skillLevelId":3,"description":"A skilled blacksmith who specialises in making of weapons"},{"id":18,"name":"Alchemist","skillLevelId":3,"description":"A practical craftsman of the laboratory, the skilled alchemist bridges the gap between dirty physical labor and early chemistry. They wear a heavy, oil-stained leather apron over coarse wool robes to protect against stray acid splashes and flying embers. Their hands are perpetually stained yellow from sulfur and calloused from hours of stoking hot brick furnaces."},{"id":19,"name":"blacksmith","skillLevelId":3,"description":"makes items and tools out of metal - most commonly iron or steel"}],"skillLevels":[{"id":1,"name":"Unskilled","dayRate":0.04,"description":"General Labourers"},{"id":2,"name":"Semi-Skilled","dayRate":0.2,"description":"General labourers who have received some \"on-the-job\" training"},{"id":3,"name":"Skilled","dayRate":1,"description":"Skilled labourers and craftspeople who have undergone training for their profession"},{"id":4,"name":"Master","dayRate":5,"description":"Expert craftspeople capable of creating \"masterwork\" items"},{"id":5,"name":"Specialist - Level 1","dayRate":12.5,"description":"Specialist crafting skill (tier 1) - used across disciplines such as cleric, druid, wizard and alchemist for magic items, potions and scrolls."},{"id":6,"name":"Specialist - Level 2","dayRate":25,"description":"Specialist crafting skill (tier 2) - used across disciplines such as cleric, druid, wizard and alchemist for magic items, potions and scrolls."},{"id":7,"name":"Specialist - Level 3","dayRate":50,"description":"Specialist crafting skill (tier 3) - used across disciplines such as cleric, druid, wizard and alchemist for magic items, potions and scrolls."},{"id":8,"name":"Specialist - Level 4","dayRate":100,"description":"Specialist crafting skill (tier 4) - used across disciplines such as cleric, druid, wizard and alchemist for magic items, potions and scrolls."},{"id":9,"name":"Specialist - Level 5","dayRate":250,"description":"Specialist crafting skill (tier 5) - used across disciplines such as cleric, druid, wizard and alchemist for magic items, potions and scrolls."},{"id":10,"name":"Specialist - Level 6","dayRate":500,"description":"Specialist crafting skill (tier 6) - used across disciplines such as cleric, druid, wizard and alchemist for magic items, potions and scrolls."},{"id":11,"name":"Specialist - Level 7","dayRate":750,"description":"Specialist crafting skill (tier 7) - used across disciplines such as cleric, druid, wizard and alchemist for magic items, potions and scrolls."},{"id":12,"name":"Specialist - Level 8","dayRate":1000,"description":"Specialist crafting skill (tier 8) - used across disciplines such as cleric, druid, wizard and alchemist for magic items, potions and scrolls."},{"id":13,"name":"Specialist - Level 9","dayRate":1500,"description":"Specialist crafting skill (tier 9) - used across disciplines such as cleric, druid, wizard and alchemist for magic items, potions and scrolls."}],"categories":[{"id":1,"name":"Raw Materials","description":"Items harvested from natural or unnatural sources.","groupId":null},{"id":2,"name":"Fuel","description":"Used to power construction or provide heat.","groupId":null},{"id":3,"name":"Components","description":"Refined items used to make other products.","groupId":null},{"id":4,"name":"Containers","description":"Used to hold other items.","groupId":null},{"id":5,"name":"Weapons-Light","description":"Small, one-handed weapons.","groupId":null},{"id":6,"name":"Livestock","description":"Domesticated animals raised in an agricultural setting to produce labor and commodities such as meat, milk, wool, and leather.","groupId":null},{"id":7,"name":"Meat","description":"Animal flesh, used for food.","groupId":null},{"id":8,"name":"Provisions","description":"An edible or household supply used for cooking, eating, etc.","groupId":null},{"id":9,"name":"Textiles","description":"Woven fabric that can be sewn into items or garments.","groupId":null},{"id":10,"name":"Weapon - Small","description":"Small weapons can only be wielded in one hand, but it is possible that they may be thrown","groupId":null},{"id":11,"name":"Fasteners","description":"used to join items together","groupId":null}],"saleUnits":[{"id":1,"name":"each","type":"Count"},{"id":2,"name":"lbs","type":"Weight"},{"id":3,"name":"ft","type":"Measure"},{"id":4,"name":"yds","type":"Measure"},{"id":5,"name":"sq ft","type":"Measure"},{"id":6,"name":"Pint","type":"Measure"},{"id":7,"name":"Gallon","type":"Measure"},{"id":8,"name":"bushel","type":"Measure"},{"id":9,"name":"cartload","type":"Measure"},{"id":10,"name":"bundle","type":"Measure"},{"id":11,"name":"cubic ft","type":"Measure"},{"id":12,"name":"skein","type":"Measure"},{"id":13,"name":"bolt","type":"measure"},{"id":14,"name":"sack","type":"Measure"}],"itemProfessions":[{"id":1,"itemId":1,"professionId":1,"numWorkers":1,"craftingDays":290},{"id":2,"itemId":2,"professionId":2,"numWorkers":1,"craftingDays":5.2},{"id":3,"itemId":3,"professionId":3,"numWorkers":1,"craftingDays":6},{"id":4,"itemId":4,"professionId":4,"numWorkers":1,"craftingDays":0.5},{"id":6,"itemId":6,"professionId":6,"numWorkers":1,"craftingDays":2.2},{"id":7,"itemId":6,"professionId":3,"numWorkers":1,"craftingDays":10},{"id":8,"itemId":1,"professionId":7,"numWorkers":1,"craftingDays":20},{"id":9,"itemId":7,"professionId":6,"numWorkers":1,"craftingDays":2.2},{"id":10,"itemId":7,"professionId":3,"numWorkers":1,"craftingDays":10},{"id":11,"itemId":9,"professionId":6,"numWorkers":1,"craftingDays":2.2},{"id":12,"itemId":9,"professionId":3,"numWorkers":1,"craftingDays":10},{"id":13,"itemId":1,"professionId":3,"numWorkers":1,"craftingDays":50},{"id":14,"itemId":10,"professionId":6,"numWorkers":1,"craftingDays":0.03},{"id":15,"itemId":11,"professionId":6,"numWorkers":1,"craftingDays":0.03},{"id":16,"itemId":12,"professionId":6,"numWorkers":1,"craftingDays":0.03},{"id":17,"itemId":13,"professionId":6,"numWorkers":1,"craftingDays":0.483},{"id":18,"itemId":14,"professionId":8,"numWorkers":1,"craftingDays":10},{"id":19,"itemId":14,"professionId":7,"numWorkers":1,"craftingDays":0.5},{"id":20,"itemId":15,"professionId":9,"numWorkers":1,"craftingDays":9.1},{"id":21,"itemId":17,"professionId":6,"numWorkers":1,"craftingDays":0.36},{"id":22,"itemId":18,"professionId":8,"numWorkers":1,"craftingDays":12.5},{"id":23,"itemId":18,"professionId":7,"numWorkers":1,"craftingDays":0.5},{"id":24,"itemId":19,"professionId":8,"numWorkers":1,"craftingDays":12},{"id":25,"itemId":19,"professionId":7,"numWorkers":1,"craftingDays":0.5},{"id":26,"itemId":20,"professionId":8,"numWorkers":1,"craftingDays":15},{"id":27,"itemId":20,"professionId":7,"numWorkers":1,"craftingDays":0.5},{"id":28,"itemId":21,"professionId":8,"numWorkers":1,"craftingDays":10.5},{"id":29,"itemId":21,"professionId":7,"numWorkers":1,"craftingDays":0.5},{"id":30,"itemId":22,"professionId":8,"numWorkers":1,"craftingDays":10},{"id":31,"itemId":22,"professionId":7,"numWorkers":1,"craftingDays":0.5},{"id":32,"itemId":23,"professionId":8,"numWorkers":1,"craftingDays":11},{"id":33,"itemId":23,"professionId":7,"numWorkers":1,"craftingDays":0.5},{"id":34,"itemId":24,"professionId":8,"numWorkers":1,"craftingDays":15},{"id":35,"itemId":24,"professionId":7,"numWorkers":1,"craftingDays":0.5},{"id":36,"itemId":25,"professionId":8,"numWorkers":1,"craftingDays":12.5},{"id":37,"itemId":25,"professionId":7,"numWorkers":1,"craftingDays":0.5},{"id":38,"itemId":26,"professionId":8,"numWorkers":1,"craftingDays":14},{"id":39,"itemId":26,"professionId":7,"numWorkers":1,"craftingDays":0.5},{"id":41,"itemId":28,"professionId":10,"numWorkers":1,"craftingDays":72},{"id":42,"itemId":29,"professionId":10,"numWorkers":1,"craftingDays":24},{"id":43,"itemId":31,"professionId":10,"numWorkers":1,"craftingDays":54},{"id":44,"itemId":32,"professionId":10,"numWorkers":1,"craftingDays":18},{"id":45,"itemId":33,"professionId":11,"numWorkers":1,"craftingDays":42.6},{"id":46,"itemId":34,"professionId":11,"numWorkers":1,"craftingDays":17.7},{"id":47,"itemId":35,"professionId":11,"numWorkers":1,"craftingDays":38.4},{"id":48,"itemId":36,"professionId":11,"numWorkers":1,"craftingDays":20.4},{"id":49,"itemId":37,"professionId":3,"numWorkers":1,"craftingDays":0.15},{"id":50,"itemId":38,"professionId":5,"numWorkers":1,"craftingDays":121.75},{"id":51,"itemId":38,"professionId":3,"numWorkers":1,"craftingDays":6.75},{"id":52,"itemId":39,"professionId":5,"numWorkers":1,"craftingDays":121.75},{"id":53,"itemId":39,"professionId":3,"numWorkers":1,"craftingDays":6.75},{"id":54,"itemId":40,"professionId":5,"numWorkers":1,"craftingDays":121.75},{"id":55,"itemId":40,"professionId":3,"numWorkers":1,"craftingDays":6.75},{"id":59,"itemId":5,"professionId":4,"numWorkers":1,"craftingDays":0.5},{"id":60,"itemId":41,"professionId":12,"numWorkers":1,"craftingDays":0.1073},{"id":61,"itemId":42,"professionId":12,"numWorkers":1,"craftingDays":0.0625},{"id":62,"itemId":43,"professionId":12,"numWorkers":1,"craftingDays":0.0525},{"id":63,"itemId":44,"professionId":12,"numWorkers":1,"craftingDays":0.1073},{"id":64,"itemId":45,"professionId":12,"numWorkers":1,"craftingDays":0.1223},{"id":65,"itemId":46,"professionId":12,"numWorkers":1,"craftingDays":0.0423},{"id":66,"itemId":47,"professionId":12,"numWorkers":1,"craftingDays":0.1555},{"id":67,"itemId":48,"professionId":12,"numWorkers":1,"craftingDays":0.0805},{"id":68,"itemId":49,"professionId":11,"numWorkers":1,"craftingDays":3.2},{"id":69,"itemId":50,"professionId":11,"numWorkers":1,"craftingDays":12.6},{"id":70,"itemId":51,"professionId":11,"numWorkers":1,"craftingDays":6.2},{"id":71,"itemId":52,"professionId":13,"numWorkers":1,"craftingDays":2.6556},{"id":72,"itemId":53,"professionId":13,"numWorkers":1,"craftingDays":0.681},{"id":73,"itemId":54,"professionId":13,"numWorkers":1,"craftingDays":1.2038},{"id":74,"itemId":55,"professionId":13,"numWorkers":1,"craftingDays":2.07},{"id":75,"itemId":56,"professionId":13,"numWorkers":1,"craftingDays":2.466},{"id":76,"itemId":57,"professionId":14,"numWorkers":1,"craftingDays":0.131},{"id":78,"itemId":59,"professionId":15,"numWorkers":1,"craftingDays":0.05},{"id":79,"itemId":60,"professionId":16,"numWorkers":4,"craftingDays":0.95},{"id":80,"itemId":61,"professionId":16,"numWorkers":4,"craftingDays":2.05},{"id":81,"itemId":2,"professionId":3,"numWorkers":1,"craftingDays":7.5},{"id":82,"itemId":62,"professionId":17,"numWorkers":1,"craftingDays":1.84},{"id":83,"itemId":63,"professionId":3,"numWorkers":1,"craftingDays":0.25},{"id":84,"itemId":64,"professionId":18,"numWorkers":1,"craftingDays":20.9},{"id":85,"itemId":65,"professionId":19,"numWorkers":1,"craftingDays":0.095},{"id":86,"itemId":66,"professionId":19,"numWorkers":1,"craftingDays":0.095},{"id":87,"itemId":67,"professionId":19,"numWorkers":1,"craftingDays":0.095},{"id":88,"itemId":68,"professionId":3,"numWorkers":1,"craftingDays":0.25}],"categoryGroups":[]};
+</script>
+<script>
+/* ===================== Storage (multi-world, IndexedDB) =====================
+   Worlds live in IndexedDB (object store "worlds"), plus a small "meta"
+   store holding which world is active. IndexedDB is asynchronous, so the
+   app boots by awaiting initStorage() before the first render.
+
+   In-memory model (unchanged for all render/calc code):
+     library = { activeWorldId, worlds: [ {id, name, data:{...}} ] }
+     state   = active world's data object
+   Saves are debounced: edits mutate the in-memory model immediately and
+   schedule a background write a moment later. */
+
+const DB_NAME = 'itemLedgerDB';
+const DB_VERSION = 1;
+const STORE_WORLDS = 'worlds';
+const STORE_META = 'meta';
+const LEGACY_LS_LIBRARY = 'itemLedgerLibrary_v2';
+const LEGACY_LS_SINGLE = 'itemLedgerData_v1';
+
+let _db = null;
+let library = { activeWorldId: null, worlds: [] };
+let state = null;
+let currentItemId = null;
+
+function blankWorldData() {
+  return { items: [], components: [], professions: [], skillLevels: [], categories: [], saleUnits: [], itemProfessions: [], categoryGroups: [] };
+}
+function makeWorld(name, data) {
+  return { id: 'w' + Date.now() + Math.floor(Math.random() * 100000), name: name, data: data };
+}
+
+function openDB() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(DB_NAME, DB_VERSION);
+    req.onupgradeneeded = e => {
+      const db = e.target.result;
+      if (!db.objectStoreNames.contains(STORE_WORLDS)) db.createObjectStore(STORE_WORLDS, { keyPath: 'id' });
+      if (!db.objectStoreNames.contains(STORE_META)) db.createObjectStore(STORE_META, { keyPath: 'key' });
+    };
+    req.onsuccess = e => resolve(e.target.result);
+    req.onerror = e => reject(e.target.error);
+  });
+}
+
+function idbGetAll(storeName) {
+  return new Promise((resolve, reject) => {
+    const tx = _db.transaction(storeName, 'readonly');
+    const req = tx.objectStore(storeName).getAll();
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+function idbGet(storeName, key) {
+  return new Promise((resolve, reject) => {
+    const tx = _db.transaction(storeName, 'readonly');
+    const req = tx.objectStore(storeName).get(key);
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+function idbPut(storeName, value) {
+  return new Promise((resolve, reject) => {
+    const tx = _db.transaction(storeName, 'readwrite');
+    tx.objectStore(storeName).put(value);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+function idbDelete(storeName, key) {
+  return new Promise((resolve, reject) => {
+    const tx = _db.transaction(storeName, 'readwrite');
+    tx.objectStore(storeName).delete(key);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+async function initStorage() {
+  _db = await openDB();
+  let worlds = await idbGetAll(STORE_WORLDS);
+  let meta = await idbGet(STORE_META, 'activeWorldId');
+
+  if (!worlds || worlds.length === 0) {
+    // Migrate from localStorage if a previous version stored data there
+    const migrated = tryMigrateFromLocalStorage();
+    if (migrated) {
+      for (const w of migrated.worlds) await idbPut(STORE_WORLDS, w);
+      await idbPut(STORE_META, { key: 'activeWorldId', value: migrated.activeWorldId });
+      worlds = migrated.worlds;
+      meta = { key: 'activeWorldId', value: migrated.activeWorldId };
+    } else {
+      // First run ever: seed world
+      const w = makeWorld('My World', JSON.parse(JSON.stringify(SEED_DATA)));
+      await idbPut(STORE_WORLDS, w);
+      await idbPut(STORE_META, { key: 'activeWorldId', value: w.id });
+      worlds = [w];
+      meta = { key: 'activeWorldId', value: w.id };
+    }
+  }
+
+  library.worlds = worlds;
+  library.activeWorldId = (meta && meta.value && worlds.find(w => w.id === meta.value)) ? meta.value : worlds[0].id;
+  setActiveWorldInMemory(library.activeWorldId);
+}
+
+function tryMigrateFromLocalStorage() {
+  try {
+    const libRaw = localStorage.getItem(LEGACY_LS_LIBRARY);
+    if (libRaw) {
+      const lib = JSON.parse(libRaw);
+      if (lib && Array.isArray(lib.worlds) && lib.worlds.length) return lib;
+    }
+  } catch (e) { /* ignore */ }
+  try {
+    const single = localStorage.getItem(LEGACY_LS_SINGLE);
+    if (single) {
+      const data = JSON.parse(single);
+      const w = makeWorld('My World', data);
+      return { activeWorldId: w.id, worlds: [w] };
+    }
+  } catch (e) { /* ignore */ }
+  return null;
+}
+
+function setActiveWorldInMemory(worldId) {
+  const w = library.worlds.find(x => x.id === worldId) || library.worlds[0];
+  library.activeWorldId = w.id;
+  state = w.data;
+  // Backward-compat: older worlds may lack category groups
+  if (!Array.isArray(state.categoryGroups)) state.categoryGroups = [];
+  for (const c of state.categories) { if (!('groupId' in c)) c.groupId = null; }
+  currentItemId = state.items.length ? state.items[0].id : null;
+  invalidateParentIndex();
+  rebuildCalcCache();
+}
+
+function activeWorld() {
+  return library.worlds.find(w => w.id === library.activeWorldId) || library.worlds[0];
+}
+
+/* ---- Debounced persistence of the active world ---- */
+let _saveTimer = null;
+let _savePending = false;
+function saveState() {
+  // mark cache dirty handled by callers via invalidate; here we just persist
+  _savePending = true;
+  if (_saveTimer) clearTimeout(_saveTimer);
+  _saveTimer = setTimeout(flushSave, 400);
+}
+async function flushSave() {
+  if (!_savePending) return;
+  _savePending = false;
+  const w = activeWorld();
+  try {
+    await idbPut(STORE_WORLDS, w);
+    await idbPut(STORE_META, { key: 'activeWorldId', value: library.activeWorldId });
+  } catch (e) {
+    console.error('Save failed:', e);
+    _savePending = true; // retry on next tick
+  }
+}
+// Best-effort flush if the page is closing
+window.addEventListener('beforeunload', () => { if (_savePending) { try { /* sync best-effort */ flushSave(); } catch (e) {} } });
+
+/* ---- World management (async where they persist) ---- */
+async function switchWorld(worldId) {
+  setActiveWorldInMemory(worldId);
+  await idbPut(STORE_META, { key: 'activeWorldId', value: library.activeWorldId });
+}
+async function createWorld(name, data) {
+  const w = makeWorld(name || 'Untitled World', data || blankWorldData());
+  library.worlds.push(w);
+  setActiveWorldInMemory(w.id);
+  await idbPut(STORE_WORLDS, w);
+  await idbPut(STORE_META, { key: 'activeWorldId', value: library.activeWorldId });
+  return w;
+}
+async function duplicateWorld(worldId) {
+  const src = library.worlds.find(x => x.id === worldId);
+  if (!src) return;
+  const copy = makeWorld(src.name + ' (copy)', JSON.parse(JSON.stringify(src.data)));
+  library.worlds.push(copy);
+  await idbPut(STORE_WORLDS, copy);
+  return copy;
+}
+async function renameWorld(worldId, newName) {
+  const w = library.worlds.find(x => x.id === worldId);
+  if (w) { w.name = newName; await idbPut(STORE_WORLDS, w); }
+}
+async function deleteWorld(worldId) {
+  if (library.worlds.length <= 1) return false;
+  library.worlds = library.worlds.filter(x => x.id !== worldId);
+  await idbDelete(STORE_WORLDS, worldId);
+  if (library.activeWorldId === worldId) {
+    setActiveWorldInMemory(library.worlds[0].id);
+    await idbPut(STORE_META, { key: 'activeWorldId', value: library.activeWorldId });
+  }
+  return true;
+}
+
+/* ===================== Lookups ===================== */
+function getItem(id) { return state.items.find(i => i.id === id); }
+function getProfession(id) { return state.professions.find(p => p.id === id); }
+function getSkillLevel(id) { return state.skillLevels.find(s => s.id === id); }
+function getSaleUnit(id) { return state.saleUnits.find(s => s.id === id); }
+function getCategory(id) { return state.categories.find(c => c.id === id); }
+function getCategoryGroup(id) { return (state.categoryGroups || []).find(g => g.id === id); }
+function componentsOf(itemId) { return state.components.filter(c => c.parentItemId === itemId); }
+function professionsOf(itemId) { return state.itemProfessions.filter(ip => ip.itemId === itemId); }
+function usedAsComponentElsewhere(itemId) { return state.components.filter(c => c.componentItemId === itemId); }
+function nextId(arr) { return arr.reduce((m, x) => Math.max(m, x.id), 0) + 1; }
+
+/* ===================== Cached + incremental calculation engine =====================
+   calcResultCache: Map(itemId -> result object), holds the live value of every
+   item. rebuildCalcCache() does a full pass (used on load / world switch /
+   structural edits). recalcFrom(itemId) recomputes just that item and everything
+   that depends on it (its ancestors in the component graph), used for fast inline
+   edits. Both produce identical results - verified against the simple engine. */
+
+let calcResultCache = new Map();
+
+function computeItem(itemId, cache, visiting) {
+  const empty = { materialsTotal: 0, labourTotal: 0, totalCost: 0, itemValue: 0, catalogueValue: 0, catalogueWeight: 0, circular: false };
+  if (visiting.has(itemId)) return { ...empty, circular: true };
+  const item = getItem(itemId);
+  if (!item) return empty;
+
+  visiting.add(itemId);
+
+  let labourTotal = 0;
+  for (const ip of professionsOf(itemId)) {
+    const prof = getProfession(ip.professionId);
+    const sk = prof ? getSkillLevel(prof.skillLevelId) : null;
+    const dayRate = sk ? (sk.dayRate || 0) : 0;
+    labourTotal += (ip.numWorkers || 0) * (ip.craftingDays || 0) * dayRate;
+  }
+
+  let materialsTotal = 0;
+  let anyCircular = false;
+  for (const c of componentsOf(itemId)) {
+    let compResult = cache.get(c.componentItemId);
+    if (!compResult) compResult = computeItem(c.componentItemId, cache, visiting);
+    if (compResult.circular) anyCircular = true;
+    materialsTotal += (c.quantity || 0) * (compResult.catalogueValue || 0);
+  }
+
+  const totalCost = materialsTotal + labourTotal;
+  const itemValue = totalCost + (item.markupAmount || 0);
+
+  const su = getSaleUnit(item.saleUnitId);
+  const unitType = su ? (su.type || '').toLowerCase() : '';
+  const weight = item.weightLbs || 0;
+  const minQty = item.minSaleQty || 0;
+  const baseQty = item.baseMeasureQty || 0;
+
+  let catalogueValue = 0, catalogueWeight = 0;
+  if (unitType === 'weight') {
+    catalogueWeight = minQty;
+    catalogueValue = weight === 0 ? 0 : itemValue * (minQty / weight);
+  } else if (unitType === 'count' || unitType === 'measure') {
+    catalogueWeight = baseQty === 0 ? 0 : weight * (minQty / baseQty);
+    catalogueValue = baseQty === 0 ? 0 : itemValue * (minQty / baseQty);
+  }
+
+  const result = { materialsTotal, labourTotal, totalCost, itemValue, catalogueValue, catalogueWeight, circular: anyCircular };
+  visiting.delete(itemId);
+  cache.set(itemId, result);
+  return result;
+}
+
+function rebuildCalcCache() {
+  calcResultCache = new Map();
+  for (const it of state.items) {
+    if (!calcResultCache.has(it.id)) computeItem(it.id, calcResultCache, new Set());
+  }
+  return calcResultCache;
+}
+
+/* Build a reverse dependency index: for a given item, who uses it as a component
+   (directly)? Cached and only rebuilt when the component graph changes
+   (add/remove item or link), so repeated inline edits stay fast even on very
+   large datasets. */
+let _parentIndex = null;
+function buildParentIndex() {
+  if (_parentIndex) return _parentIndex;
+  const idx = new Map(); // childId -> Set(parentId)
+  for (const c of state.components) {
+    if (!idx.has(c.componentItemId)) idx.set(c.componentItemId, new Set());
+    idx.get(c.componentItemId).add(c.parentItemId);
+  }
+  _parentIndex = idx;
+  return idx;
+}
+function invalidateParentIndex() { _parentIndex = null; }
+
+/* Recompute itemId and every ancestor that (transitively) depends on it.
+   Returns the set of affected item ids. */
+function recalcFrom(itemId) {
+  const parentIdx = buildParentIndex();
+  // Collect itemId + all ancestors (items that use it up the chain)
+  const affected = new Set();
+  const stack = [itemId];
+  while (stack.length) {
+    const cur = stack.pop();
+    if (affected.has(cur)) continue;
+    affected.add(cur);
+    const parents = parentIdx.get(cur);
+    if (parents) for (const p of parents) stack.push(p);
+  }
+  // Recompute affected items. Clear their cache entries first, then compute.
+  for (const id of affected) calcResultCache.delete(id);
+  for (const id of affected) {
+    if (!calcResultCache.has(id)) computeItem(id, calcResultCache, new Set());
+  }
+  return affected;
+}
+
+/* When the change is structural or global (skill rates, professions, sale units,
+   adding/removing items or links, world switch) we can't cheaply scope it, so we
+   rebuild everything. Still fast well into the thousands. */
+function invalidateAll() { invalidateParentIndex(); rebuildCalcCache(); }
+
+/* Compatibility shim: existing render code calls calcAll() and reads the Map.
+   We just return the live cache (rebuilding only if empty). */
+function calcAll() {
+  if (calcResultCache.size === 0 && state.items.length) rebuildCalcCache();
+  return calcResultCache;
+}
+
+function wouldCreateCycle(parentId, candidateComponentId) {
+  if (parentId === candidateComponentId) return true;
+  const stack = [candidateComponentId];
+  const seen = new Set();
+  while (stack.length) {
+    const cur = stack.pop();
+    if (cur === parentId) return true;
+    if (seen.has(cur)) continue;
+    seen.add(cur);
+    for (const c of componentsOf(cur)) stack.push(c.componentItemId);
+  }
+  return false;
+}
+
+/* ===================== Formatting ===================== */
+function fmtCurrency(v) {
+  const n = Number(v) || 0;
+  const sign = n < 0 ? '-' : '';
+  return sign + '\u20B2' + Math.abs(n).toFixed(4);
+}
+function fmtCurrency2(v) {
+  const n = Number(v) || 0;
+  const sign = n < 0 ? '-' : '';
+  return sign + '\u20B2' + Math.abs(n).toFixed(2);
+}
+function fmtNum(v) { return (Number(v) || 0).toFixed(4); }
+function flashEl(el) { el.classList.remove('flash'); void el.offsetWidth; el.classList.add('flash'); }
+
+</script>
+<script>
+/* ===================== Screen router ===================== */
+let currentScreen = 'home';
+let selectedItemId = null;   // highlighted row on the list page
+let draftItem = null;        // working copy while editing (null when not editing)
+let draftIsNew = false;
+
+function navigate(screen) {
+  currentScreen = screen;
+  // Push a history entry so the device Back button steps through screens
+  // rather than immediately leaving the app.
+  try { history.pushState({ screen: screen }, ''); } catch (e) { /* ignore */ }
+  render();
+}
+
+// Back button: if we're not on the home screen, intercept and go home/back a
+// step instead of exiting. On home, let the default happen (leave the app).
+window.addEventListener('popstate', function (e) {
+  if (currentScreen === 'editor' && draftItem) {
+    // leaving the editor via Back behaves like Cancel (with confirm)
+    if (confirm('Discard changes and return to the list?')) {
+      draftItem = null; draftIsNew = false; currentScreen = 'catalogue';
+      try { history.pushState({ screen: 'catalogue' }, ''); } catch (_) {}
+      render();
+    } else {
+      // user cancelled the back: re-push so we stay put
+      try { history.pushState({ screen: 'editor' }, ''); } catch (_) {}
+    }
+    return;
+  }
+  if (currentScreen !== 'home') {
+    currentScreen = 'home';
+    try { history.pushState({ screen: 'home' }, ''); } catch (_) {}
+    render();
+  }
+  // if already home, do nothing special (default browser/app behaviour)
+});
+
+function render() {
+  const app = document.getElementById('appRoot');
+  renderTopBar();
+  switch (currentScreen) {
+    case 'home': renderHome(app); break;
+    case 'catalogue': renderCatalogue(app); break;
+    case 'editor': renderEditorPage(app); break;
+    case 'professions': renderProfessionsScreen(app); break;
+    case 'skillLevels': renderSkillLevelsScreen(app); break;
+    case 'categories': renderCategoriesScreen(app); break;
+    case 'categoryGroups': renderCategoryGroupsScreen(app); break;
+    case 'saleUnits': renderSaleUnitsScreen(app); break;
+    default: renderHome(app);
+  }
+}
+
+/* ===================== Top bar + world selector ===================== */
+function renderTopBar() {
+  const bar = document.getElementById('worldBar');
+  const opts = library.worlds.map(w =>
+    `<option value="${w.id}" ${w.id === library.activeWorldId ? 'selected' : ''}>${escapeHtml(w.name)}</option>`
+  ).join('');
+  bar.innerHTML = `
+    <label class="world-label">World</label>
+    <select id="worldSelect">${opts}</select>
+    <button class="btn btn-ghost btn-sm" id="worldManageBtn">Manage worlds\u2026</button>
+  `;
+  document.getElementById('worldSelect').addEventListener('change', async e => {
+    await switchWorld(e.target.value);
+    render();
+  });
+  document.getElementById('worldManageBtn').addEventListener('click', openWorldManager);
+}
+
+/* ===================== Home screen ===================== */
+function renderHome(app) {
+  const aw = activeWorld();
+  const counts = {
+    items: state.items.length, professions: state.professions.length,
+    skillLevels: state.skillLevels.length, categories: state.categories.length,
+    saleUnits: state.saleUnits.length
+  };
+  app.innerHTML = `
+    <div class="home-wrap">
+      <div class="home-head">
+        <h2>${escapeHtml(aw.name)}</h2>
+        <p class="home-sub">Choose a register to work in. Everything below belongs to this world.</p>
+      </div>
+      <div class="tile-grid">
+        ${tile('catalogue', 'Item Catalogue', 'Create and price items, components and labour', counts.items + ' items')}
+        ${tile('professions', 'Professions', 'Trades and the skill level each one works at', counts.professions + ' professions')}
+        ${tile('skillLevels', 'Skill Levels', 'Day rates that drive every labour cost', counts.skillLevels + ' levels')}
+        ${tile('categories', 'Categories', 'How items are grouped in the catalogue', counts.categories + ' categories')}
+        ${tile('categoryGroups', 'Category Groups', 'Optional higher tier grouping categories together', (state.categoryGroups || []).length + ' groups')}
+        ${tile('saleUnits', 'Sale Units', 'Units items are sold by, and how they price', counts.saleUnits + ' units')}
+      </div>
+      <div class="home-foot">
+        <button class="btn btn-ghost btn-sm" id="homeExportBtn">Export this world\u2026</button>
+        <button class="btn btn-ghost btn-sm" id="homeImportBtn">Import a world\u2026</button>
+        <span class="home-foot-note">Worlds are stored in this browser. Export regularly to keep a backup and to move a world to another device.</span>
+      </div>
+    </div>
+  `;
+  app.querySelectorAll('[data-tile]').forEach(t => t.addEventListener('click', () => navigate(t.dataset.tile)));
+  document.getElementById('homeExportBtn').addEventListener('click', () => exportWorld(library.activeWorldId));
+  document.getElementById('homeImportBtn').addEventListener('click', () => triggerImport('newWorld'));
+}
+
+function tile(screen, title, desc, stat) {
+  return `<button class="tile" data-tile="${screen}">
+      <span class="tile-title">${title}</span>
+      <span class="tile-desc">${desc}</span>
+      <span class="tile-stat">${stat}</span>
+    </button>`;
+}
+
+function backBar(title) {
+  return `<div class="screen-head">
+      <button class="btn btn-ghost btn-sm" id="backHomeBtn">\u2190 Home</button>
+      <h2>${escapeHtml(title)}</h2>
+    </div>`;
+}
+function wireBack() {
+  const b = document.getElementById('backHomeBtn');
+  if (b) b.addEventListener('click', () => navigate('home'));
+}
+
+/* ===================== Item Catalogue (list page) ===================== */
+function renderCatalogue(app) {
+  // Sub-table edits (skill rates, professions, etc.) may have changed global
+  // values while we were away; ensure the cache reflects the current data.
+  invalidateAll();
+  if (!getItem(selectedItemId)) selectedItemId = null;
+  app.innerHTML = `
+    ${backBar('Item Catalogue')}
+    <div class="list-page">
+      <div class="list-toolbar">
+        <input type="text" id="searchInput" class="list-search" placeholder="Search items\u2026" />
+        <div class="list-toolbar-actions">
+          <button class="btn btn-brass" id="addItemBtn">+ Add item</button>
+          <button class="btn" id="editItemBtn" disabled>Edit</button>
+          <button class="btn btn-wax" id="deleteItemBtn" disabled>Delete</button>
+        </div>
+      </div>
+      <div class="list-table-wrap" id="listTableWrap"></div>
+    </div>
+  `;
+  wireBack();
+  document.getElementById('searchInput').addEventListener('input', renderItemList);
+  document.getElementById('addItemBtn').addEventListener('click', openNewItemEditor);
+  document.getElementById('editItemBtn').addEventListener('click', () => { if (selectedItemId != null) openEditItemEditor(selectedItemId); });
+  document.getElementById('deleteItemBtn').addEventListener('click', () => { if (selectedItemId != null) deleteItemFromList(selectedItemId); });
+  renderItemList();
+}
+
+function updateListToolbarButtons() {
+  const has = selectedItemId != null && !!getItem(selectedItemId);
+  const edit = document.getElementById('editItemBtn');
+  const del = document.getElementById('deleteItemBtn');
+  if (edit) edit.disabled = !has;
+  if (del) del.disabled = !has;
+}
+
+let collapsedCategories = new Set();  // category names currently collapsed
+let collapsedGroups = new Set();      // group keys currently collapsed
+
+function renderItemList() {
+  const wrap = document.getElementById('listTableWrap');
+  if (!wrap) return;
+  const searchEl = document.getElementById('searchInput');
+  const search = searchEl ? searchEl.value.trim().toLowerCase() : '';
+  const memo = calcAll();
+  const searching = search.length > 0;
+
+  // Bucket items by category
+  const itemsByCat = new Map();
+  for (const it of state.items) {
+    if (search && !it.name.toLowerCase().includes(search)) continue;
+    const catId = it.categoryId;
+    if (!itemsByCat.has(catId)) itemsByCat.set(catId, []);
+    itemsByCat.get(catId).push(it);
+  }
+  if (itemsByCat.size === 0) {
+    wrap.innerHTML = `<div class="empty-state">${searching ? 'No items match your search.' : 'No items yet. Use \u201c+ Add item\u201d to create your first one.'}</div>`;
+    updateListToolbarButtons();
+    return;
+  }
+
+  // Organise categories under their group (or ungrouped)
+  // Build: groupKey -> { name, cats: [catId...] }; ungrouped uses key '__none__'
+  const groups = (state.categoryGroups || []).slice().sort((a, b) => a.name.localeCompare(b.name));
+  const catsById = new Map(state.categories.map(c => [c.id, c]));
+
+  // Determine ordering: each group (alpha), each containing its categories (alpha);
+  // then ungrouped categories (alpha); then an "Uncategorised" bucket for items with no/unknown category.
+  const sections = []; // {type:'group'|'loose', groupId, name, cats:[catId]}
+  for (const g of groups) {
+    const cats = state.categories.filter(c => c.groupId === g.id)
+      .filter(c => itemsByCat.has(c.id))   // only show cats that have (matching) items
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .map(c => c.id);
+    if (cats.length) sections.push({ type: 'group', groupId: g.id, name: g.name, cats });
+  }
+  // ungrouped categories (groupId null/undefined) that have items
+  const looseCats = state.categories.filter(c => c.groupId == null && itemsByCat.has(c.id))
+    .sort((a, b) => a.name.localeCompare(b.name)).map(c => c.id);
+  // items whose category is missing entirely
+  const orphanItems = itemsByCat.get(undefined) || itemsByCat.get(null) || [];
+
+  let html = `<table class="list-table">
+    <thead><tr>
+      <th>Description</th><th>Unit</th><th class="num">Value (\u20B2.\uFE69\u00a2)</th><th class="num">Weight</th>
+    </tr></thead><tbody>`;
+
+  const renderCatBlock = (catId, indented) => {
+    const cat = catsById.get(catId);
+    const catName = cat ? cat.name : 'Uncategorised';
+    const items = (itemsByCat.get(catId) || []).slice().sort((a, b) => a.name.localeCompare(b.name));
+    const catKey = 'cat:' + catId;
+    const isCollapsed = !searching && collapsedCategories.has(catKey);
+    html += `<tr class="list-cat-row"><td colspan="4">
+      <button class="list-cat-toggle${isCollapsed ? ' collapsed' : ''}${indented ? ' indented' : ''}" data-cat-toggle="${escapeHtmlAttr(catKey)}">
+        <span class="list-cat-caret">\u25be</span>
+        <span>${escapeHtml(catName)}</span>
+        <span class="list-cat-count">(${items.length})</span>
+      </button>
+    </td></tr>`;
+    if (isCollapsed) return;
+    for (const it of items) {
+      const su = getSaleUnit(it.saleUnitId);
+      const res = memo.get(it.id) || { catalogueValue: 0, catalogueWeight: 0 };
+      const sel = it.id === selectedItemId ? ' selected' : '';
+      html += `<tr class="list-row${sel}${indented ? ' indented' : ''}" data-item-row="${it.id}">
+        <td class="lr-name">${escapeHtml(it.name)}${it.isStub ? ' <span class="stub-tag">incomplete</span>' : ''}</td>
+        <td class="lr-unit">${escapeHtml(su ? su.name : '\u2014')}</td>
+        <td class="num lr-value">\u20B2${(Number(res.catalogueValue) || 0).toFixed(2)}</td>
+        <td class="num lr-weight">${(Number(res.catalogueWeight) || 0).toFixed(2)}</td>
+      </tr>`;
+    }
+  };
+
+  // Grouped sections
+  for (const sec of sections) {
+    const groupKey = 'grp:' + sec.groupId;
+    const isGroupCollapsed = !searching && collapsedGroups.has(groupKey);
+    const totalItems = sec.cats.reduce((n, cid) => n + (itemsByCat.get(cid) || []).length, 0);
+    html += `<tr class="list-group-row"><td colspan="4">
+      <button class="list-group-toggle${isGroupCollapsed ? ' collapsed' : ''}" data-group-toggle="${escapeHtmlAttr(groupKey)}">
+        <span class="list-cat-caret">\u25be</span>
+        <span>${escapeHtml(sec.name)}</span>
+        <span class="list-cat-count">(${totalItems})</span>
+      </button>
+    </td></tr>`;
+    if (isGroupCollapsed) continue;
+    for (const cid of sec.cats) renderCatBlock(cid, true);
+  }
+  // Loose (ungrouped) categories at top level
+  for (const cid of looseCats) renderCatBlock(cid, false);
+  // Orphan items (no category)
+  if (orphanItems.length) renderCatBlock(undefined, false);
+
+  html += '</tbody></table>';
+  wrap.innerHTML = html;
+
+  wrap.querySelectorAll('[data-group-toggle]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const k = btn.dataset.groupToggle;
+      if (collapsedGroups.has(k)) collapsedGroups.delete(k); else collapsedGroups.add(k);
+      renderItemList();
+    });
+  });
+  wrap.querySelectorAll('[data-cat-toggle]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const k = btn.dataset.catToggle;
+      if (collapsedCategories.has(k)) collapsedCategories.delete(k); else collapsedCategories.add(k);
+      renderItemList();
+    });
+  });
+  wrap.querySelectorAll('[data-item-row]').forEach(tr => {
+    const id = Number(tr.dataset.itemRow);
+    tr.addEventListener('click', () => {
+      selectedItemId = id;
+      wrap.querySelectorAll('.list-row.selected').forEach(r => r.classList.remove('selected'));
+      tr.classList.add('selected');
+      updateListToolbarButtons();
+    });
+    tr.addEventListener('dblclick', () => openEditItemEditor(id));
+  });
+  updateListToolbarButtons();
+}
+
+function deleteItemFromList(id) {
+  const item = getItem(id);
+  if (!item) return;
+  const usedIn = usedAsComponentElsewhere(item.id);
+  let msg = `Delete "${item.name}"? This also removes its component and labour links.`;
+  if (usedIn.length) {
+    const parentNames = usedIn.map(c => (getItem(c.parentItemId) || {}).name || '?').join(', ');
+    msg += `\n\nWarning: this item is used as a component in: ${parentNames}. Those links will be removed too.`;
+  }
+  if (!confirm(msg)) return;
+  state.components = state.components.filter(c => c.parentItemId !== item.id && c.componentItemId !== item.id);
+  state.itemProfessions = state.itemProfessions.filter(ip => ip.itemId !== item.id);
+  state.items = state.items.filter(i => i.id !== item.id);
+  selectedItemId = null;
+  invalidateAll();
+  saveState();
+  renderItemList();
+}
+
+/* ===================== Generic helpers ===================== */
+function usageCount(predicate) { return state.items.filter(predicate).length; }
+
+/* ---------- Professions ---------- */
+function renderProfessionsScreen(app) {
+  const rows = state.professions.slice().sort((a, b) => a.name.localeCompare(b.name));
+  const skillName = id => { const s = getSkillLevel(id); return s ? s.name : '\u2014'; };
+  app.innerHTML = `
+    ${backBar('Professions')}
+    <div class="table-screen">
+      <p class="screen-note">A profession names a trade and ties it to a skill level. The skill level's day rate is what feeds into labour costs.</p>
+      <table class="data-table">
+        <thead><tr><th>Profession</th><th>Skill level</th><th class="num">Used by</th><th></th></tr></thead>
+        <tbody>
+          ${rows.map(p => {
+            const used = usageCount(it => professionsOf(it.id).some(ip => ip.professionId === p.id));
+            return `<tr>
+              <td class="dt-name">${escapeHtml(p.name)}</td>
+              <td>${escapeHtml(skillName(p.skillLevelId))}</td>
+              <td class="num dt-used">${used}</td>
+              <td class="dt-actions">
+                <button class="btn btn-sm" data-edit-prof="${p.id}">Edit</button>
+                <button class="btn btn-wax btn-sm" data-del-prof="${p.id}">Delete</button>
+              </td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>
+      <button class="btn btn-moss" id="addProfBtn">+ Add profession</button>
+    </div>
+  `;
+  wireBack();
+  document.getElementById('addProfBtn').addEventListener('click', () => editProfessionDialog(null));
+  app.querySelectorAll('[data-edit-prof]').forEach(b => b.addEventListener('click', () => editProfessionDialog(Number(b.dataset.editProf))));
+  app.querySelectorAll('[data-del-prof]').forEach(b => b.addEventListener('click', () => deleteProfession(Number(b.dataset.delProf))));
+}
+
+function editProfessionDialog(id) {
+  const isNew = id == null;
+  const prof = isNew ? { name: '', skillLevelId: (state.skillLevels[0] || {}).id } : getProfession(id);
+  const skillOpts = state.skillLevels.slice().sort((a, b) => a.id - b.id)
+    .map(s => `<option value="${s.id}" ${s.id === prof.skillLevelId ? 'selected' : ''}>${escapeHtml(s.name)} (${fmtCurrency2(s.dayRate)}/day)</option>`).join('');
+  openDialog(isNew ? 'Add profession' : 'Edit profession', `
+    <div class="field"><label>Profession name</label><input type="text" id="dlg-name" value="${escapeHtmlAttr(prof.name)}" /></div>
+    <div class="field"><label>Skill level</label><select id="dlg-skill">${skillOpts}</select></div>
+  `, () => {
+    const name = document.getElementById('dlg-name').value.trim();
+    if (!name) { alert('Please enter a name.'); return false; }
+    const skillId = Number(document.getElementById('dlg-skill').value);
+    if (isNew) state.professions.push({ id: nextId(state.professions), name, skillLevelId: skillId, description: '' });
+    else { prof.name = name; prof.skillLevelId = skillId; }
+    saveState(); render(); return true;
+  });
+}
+
+function deleteProfession(id) {
+  const prof = getProfession(id);
+  if (!prof) return;
+  const used = usageCount(it => professionsOf(it.id).some(ip => ip.professionId === id));
+  let msg = `Delete profession "${prof.name}"?`;
+  if (used > 0) msg += `\n\nIt is currently used in ${used} item(s). Those labour lines will be removed and the affected items re-costed.`;
+  if (!confirm(msg)) return;
+  state.itemProfessions = state.itemProfessions.filter(ip => ip.professionId !== id);
+  state.professions = state.professions.filter(p => p.id !== id);
+  saveState(); render();
+}
+
+/* ---------- Skill Levels ---------- */
+function renderSkillLevelsScreen(app) {
+  const rows = state.skillLevels.slice().sort((a, b) => a.id - b.id);
+  app.innerHTML = `
+    ${backBar('Skill Levels')}
+    <div class="table-screen">
+      <p class="screen-note">A skill level's day rate flows into every profession that uses it, and from there into item labour costs. Changing a rate re-prices everything that depends on it.</p>
+      <table class="data-table">
+        <thead><tr><th>Skill level</th><th class="num">Day rate</th><th class="num">Professions</th><th></th></tr></thead>
+        <tbody>
+          ${rows.map(s => {
+            const usedBy = state.professions.filter(p => p.skillLevelId === s.id).length;
+            return `<tr>
+              <td class="dt-name">${escapeHtml(s.name)}</td>
+              <td class="num">${fmtCurrency2(s.dayRate)}</td>
+              <td class="num dt-used">${usedBy}</td>
+              <td class="dt-actions">
+                <button class="btn btn-sm" data-edit-skill="${s.id}">Edit</button>
+                <button class="btn btn-wax btn-sm" data-del-skill="${s.id}">Delete</button>
+              </td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>
+      <button class="btn btn-moss" id="addSkillBtn">+ Add skill level</button>
+    </div>
+  `;
+  wireBack();
+  document.getElementById('addSkillBtn').addEventListener('click', () => editSkillDialog(null));
+  app.querySelectorAll('[data-edit-skill]').forEach(b => b.addEventListener('click', () => editSkillDialog(Number(b.dataset.editSkill))));
+  app.querySelectorAll('[data-del-skill]').forEach(b => b.addEventListener('click', () => deleteSkill(Number(b.dataset.delSkill))));
+}
+
+function editSkillDialog(id) {
+  const isNew = id == null;
+  const sk = isNew ? { name: '', dayRate: 0 } : getSkillLevel(id);
+  openDialog(isNew ? 'Add skill level' : 'Edit skill level', `
+    <div class="field"><label>Skill level name</label><input type="text" id="dlg-name" value="${escapeHtmlAttr(sk.name)}" /></div>
+    <div class="field"><label>Day rate (\u20B2)</label><input type="number" step="0.0001" id="dlg-rate" value="${fmtNum(sk.dayRate)}" /></div>
+  `, () => {
+    const name = document.getElementById('dlg-name').value.trim();
+    if (!name) { alert('Please enter a name.'); return false; }
+    const rate = parseFloat(document.getElementById('dlg-rate').value) || 0;
+    if (isNew) state.skillLevels.push({ id: nextId(state.skillLevels), name, dayRate: rate, description: '' });
+    else { sk.name = name; sk.dayRate = rate; }
+    saveState(); render(); return true;
+  });
+}
+
+function deleteSkill(id) {
+  const sk = getSkillLevel(id);
+  if (!sk) return;
+  const usedBy = state.professions.filter(p => p.skillLevelId === id);
+  if (usedBy.length > 0) {
+    alert(`Cannot delete "${sk.name}" yet.\n\nIt is still assigned to ${usedBy.length} profession(s): ${usedBy.map(p => p.name).join(', ')}.\n\nReassign or delete those professions first.`);
+    return;
+  }
+  if (!confirm(`Delete skill level "${sk.name}"?`)) return;
+  state.skillLevels = state.skillLevels.filter(s => s.id !== id);
+  saveState(); render();
+}
+
+/* ---------- Categories ---------- */
+function renderCategoriesScreen(app) {
+  const rows = state.categories.slice().sort((a, b) => a.name.localeCompare(b.name));
+  const groupName = id => { const g = getCategoryGroup(id); return g ? g.name : '\u2014'; };
+  app.innerHTML = `
+    ${backBar('Categories')}
+    <div class="table-screen">
+      <p class="screen-note">Categories group items in the catalogue. Each category can optionally sit under a higher-level Category Group.</p>
+      <table class="data-table">
+        <thead><tr><th>Category</th><th>Group</th><th class="num">Items</th><th></th></tr></thead>
+        <tbody>
+          ${rows.map(c => {
+            const used = usageCount(it => it.categoryId === c.id);
+            return `<tr>
+              <td class="dt-name">${escapeHtml(c.name)}</td>
+              <td>${escapeHtml(groupName(c.groupId))}</td>
+              <td class="num dt-used">${used}</td>
+              <td class="dt-actions">
+                <button class="btn btn-sm" data-edit-cat="${c.id}">Edit</button>
+                <button class="btn btn-wax btn-sm" data-del-cat="${c.id}">Delete</button>
+              </td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>
+      <button class="btn btn-moss" id="addCatBtn">+ Add category</button>
+    </div>
+  `;
+  wireBack();
+  document.getElementById('addCatBtn').addEventListener('click', () => editCatDialog(null));
+  app.querySelectorAll('[data-edit-cat]').forEach(b => b.addEventListener('click', () => editCatDialog(Number(b.dataset.editCat))));
+  app.querySelectorAll('[data-del-cat]').forEach(b => b.addEventListener('click', () => deleteCat(Number(b.dataset.delCat))));
+}
+
+function categoryGroupOptions(selectedId) {
+  const groups = (state.categoryGroups || []).slice().sort((a, b) => a.name.localeCompare(b.name));
+  const opts = groups.map(g => `<option value="${g.id}" ${g.id === selectedId ? 'selected' : ''}>${escapeHtml(g.name)}</option>`).join('');
+  return `<option value="__add__">+ Add new group\u2026</option><option value="" ${selectedId == null ? 'selected' : ''}>\u2014 None (ungrouped) \u2014</option>${opts}`;
+}
+
+function editCatDialog(id) {
+  const isNew = id == null;
+  const cat = isNew ? { name: '', description: '', groupId: null } : getCategory(id);
+  openDialog(isNew ? 'Add category' : 'Edit category', `
+    <div class="field"><label>Category name</label><input type="text" id="dlg-name" value="${escapeHtmlAttr(cat.name)}" /></div>
+    <div class="field"><label>Category group (optional)</label><select id="dlg-group">${categoryGroupOptions(cat.groupId)}</select></div>
+    <div class="field"><label>Description (optional)</label><textarea id="dlg-desc">${escapeHtml(cat.description)}</textarea></div>
+  `, () => {
+    const name = document.getElementById('dlg-name').value.trim();
+    if (!name) { alert('Please enter a name.'); return false; }
+    const desc = document.getElementById('dlg-desc').value;
+    const groupVal = document.getElementById('dlg-group').value;
+    const groupId = groupVal === '' || groupVal === '__add__' ? null : Number(groupVal);
+    if (isNew) state.categories.push({ id: nextId(state.categories), name, description: desc, groupId });
+    else { cat.name = name; cat.description = desc; cat.groupId = groupId; }
+    saveState(); render(); return true;
+  });
+  // wire the inline add-group option
+  const sel = document.getElementById('dlg-group');
+  if (sel) {
+    sel.value = cat.groupId == null ? '' : String(cat.groupId);
+    sel.addEventListener('change', e => {
+      if (e.target.value === '__add__') {
+        const name = prompt('New category group name:');
+        if (name && name.trim()) {
+          const gid = nextId(state.categoryGroups);
+          state.categoryGroups.push({ id: gid, name: name.trim(), description: '' });
+          saveState();
+          e.target.innerHTML = categoryGroupOptions(gid);
+          e.target.value = String(gid);
+        } else {
+          e.target.value = '';
+        }
+      }
+    });
+  }
+}
+
+function deleteCat(id) {
+  const cat = getCategory(id);
+  if (!cat) return;
+  const used = usageCount(it => it.categoryId === id);
+  let msg = `Delete category "${cat.name}"?`;
+  if (used > 0) msg += `\n\n${used} item(s) use this category. They will become uncategorised until you assign a new one.`;
+  if (!confirm(msg)) return;
+  state.items.forEach(it => { if (it.categoryId === id) it.categoryId = null; });
+  state.categories = state.categories.filter(c => c.id !== id);
+  saveState(); render();
+}
+
+/* ---------- Category Groups ---------- */
+function renderCategoryGroupsScreen(app) {
+  const rows = (state.categoryGroups || []).slice().sort((a, b) => a.name.localeCompare(b.name));
+  app.innerHTML = `
+    ${backBar('Category Groups')}
+    <div class="table-screen">
+      <p class="screen-note">Category Groups are an optional higher tier that bundle related categories together (for example, a \u201cFood &amp; Drink\u201d group containing Beverages, Meat and Provisions). Categories not assigned to a group simply appear on their own.</p>
+      <table class="data-table">
+        <thead><tr><th>Group</th><th class="num">Categories</th><th></th></tr></thead>
+        <tbody>
+          ${rows.length ? rows.map(g => {
+            const inGroup = state.categories.filter(c => c.groupId === g.id).length;
+            return `<tr>
+              <td class="dt-name">${escapeHtml(g.name)}</td>
+              <td class="num dt-used">${inGroup}</td>
+              <td class="dt-actions">
+                <button class="btn btn-sm" data-edit-group="${g.id}">Edit</button>
+                <button class="btn btn-wax btn-sm" data-del-group="${g.id}">Delete</button>
+              </td>
+            </tr>`;
+          }).join('') : '<tr><td colspan="3" style="color:var(--ink-faint);font-style:italic;">No groups yet.</td></tr>'}
+        </tbody>
+      </table>
+      <button class="btn btn-moss" id="addGroupBtn">+ Add group</button>
+    </div>
+  `;
+  wireBack();
+  document.getElementById('addGroupBtn').addEventListener('click', () => editGroupDialog(null));
+  app.querySelectorAll('[data-edit-group]').forEach(b => b.addEventListener('click', () => editGroupDialog(Number(b.dataset.editGroup))));
+  app.querySelectorAll('[data-del-group]').forEach(b => b.addEventListener('click', () => deleteGroup(Number(b.dataset.delGroup))));
+}
+
+function editGroupDialog(id) {
+  const isNew = id == null;
+  const g = isNew ? { name: '', description: '' } : getCategoryGroup(id);
+  openDialog(isNew ? 'Add category group' : 'Edit category group', `
+    <div class="field"><label>Group name</label><input type="text" id="dlg-name" value="${escapeHtmlAttr(g.name)}" /></div>
+    <div class="field"><label>Description (optional)</label><textarea id="dlg-desc">${escapeHtml(g.description || '')}</textarea></div>
+  `, () => {
+    const name = document.getElementById('dlg-name').value.trim();
+    if (!name) { alert('Please enter a name.'); return false; }
+    const desc = document.getElementById('dlg-desc').value;
+    if (isNew) state.categoryGroups.push({ id: nextId(state.categoryGroups), name, description: desc });
+    else { g.name = name; g.description = desc; }
+    saveState(); render(); return true;
+  });
+}
+
+function deleteGroup(id) {
+  const g = getCategoryGroup(id);
+  if (!g) return;
+  const inGroup = state.categories.filter(c => c.groupId === id).length;
+  let msg = `Delete category group "${g.name}"?`;
+  if (inGroup > 0) msg += `\n\n${inGroup} categor${inGroup === 1 ? 'y' : 'ies'} sit under it. They will become ungrouped (the categories and their items are not deleted).`;
+  if (!confirm(msg)) return;
+  state.categories.forEach(c => { if (c.groupId === id) c.groupId = null; });
+  state.categoryGroups = state.categoryGroups.filter(x => x.id !== id);
+  saveState(); render();
+}
+
+/* ---------- Sale Units ---------- */
+function renderSaleUnitsScreen(app) {
+  const rows = state.saleUnits.slice().sort((a, b) => a.name.localeCompare(b.name));
+  app.innerHTML = `
+    ${backBar('Sale Units')}
+    <div class="table-screen">
+      <p class="screen-note">A sale unit's type (weight, count or measure) decides how an item's catalogue price per unit is worked out.</p>
+      <table class="data-table">
+        <thead><tr><th>Sale unit</th><th>Type</th><th class="num">Items</th><th></th></tr></thead>
+        <tbody>
+          ${rows.map(u => {
+            const used = usageCount(it => it.saleUnitId === u.id);
+            return `<tr>
+              <td class="dt-name">${escapeHtml(u.name)}</td>
+              <td>${escapeHtml(u.type || '\u2014')}</td>
+              <td class="num dt-used">${used}</td>
+              <td class="dt-actions">
+                <button class="btn btn-sm" data-edit-unit="${u.id}">Edit</button>
+                <button class="btn btn-wax btn-sm" data-del-unit="${u.id}">Delete</button>
+              </td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>
+      <button class="btn btn-moss" id="addUnitBtn">+ Add sale unit</button>
+    </div>
+  `;
+  wireBack();
+  document.getElementById('addUnitBtn').addEventListener('click', () => editUnitDialog(null));
+  app.querySelectorAll('[data-edit-unit]').forEach(b => b.addEventListener('click', () => editUnitDialog(Number(b.dataset.editUnit))));
+  app.querySelectorAll('[data-del-unit]').forEach(b => b.addEventListener('click', () => deleteUnit(Number(b.dataset.delUnit))));
+}
+
+function editUnitDialog(id) {
+  const isNew = id == null;
+  const unit = isNew ? { name: '', type: 'count' } : getSaleUnit(id);
+  const types = ['weight', 'count', 'measure'];
+  const typeOpts = types.map(t => `<option value="${t}" ${(unit.type || '').toLowerCase() === t ? 'selected' : ''}>${t}</option>`).join('');
+  openDialog(isNew ? 'Add sale unit' : 'Edit sale unit', `
+    <div class="field"><label>Sale unit name</label><input type="text" id="dlg-name" value="${escapeHtmlAttr(unit.name)}" /></div>
+    <div class="field"><label>Type</label><select id="dlg-type">${typeOpts}</select></div>
+    <p class="dlg-hint"><strong>weight</strong>: priced by share of the item's weight. <strong>count</strong> / <strong>measure</strong>: priced by share of the base measure quantity.</p>
+  `, () => {
+    const name = document.getElementById('dlg-name').value.trim();
+    if (!name) { alert('Please enter a name.'); return false; }
+    const type = document.getElementById('dlg-type').value;
+    if (isNew) state.saleUnits.push({ id: nextId(state.saleUnits), name, type });
+    else { unit.name = name; unit.type = type; }
+    saveState(); render(); return true;
+  });
+}
+
+function deleteUnit(id) {
+  const unit = getSaleUnit(id);
+  if (!unit) return;
+  const used = usageCount(it => it.saleUnitId === id);
+  if (used > 0) {
+    alert(`Cannot delete "${unit.name}" yet.\n\n${used} item(s) are sold by this unit. Change their sale unit first, then delete this one.`);
+    return;
+  }
+  if (!confirm(`Delete sale unit "${unit.name}"?`)) return;
+  state.saleUnits = state.saleUnits.filter(u => u.id !== id);
+  saveState(); render();
+}
+
+/* ===================== World manager ===================== */
+function openWorldManager() {
+  const rows = library.worlds.map(w => {
+    const isActive = w.id === library.activeWorldId;
+    return `<tr>
+      <td class="dt-name">${escapeHtml(w.name)}${isActive ? ' <span class="active-pill">active</span>' : ''}</td>
+      <td class="num dt-used">${w.data.items.length} items</td>
+      <td class="dt-actions">
+        ${isActive ? '' : `<button class="btn btn-sm" data-world-switch="${w.id}">Open</button>`}
+        <button class="btn btn-sm" data-world-rename="${w.id}">Rename</button>
+        <button class="btn btn-sm" data-world-dupe="${w.id}">Duplicate</button>
+        <button class="btn btn-sm" data-world-export="${w.id}">Export</button>
+        <button class="btn btn-wax btn-sm" data-world-delete="${w.id}" ${library.worlds.length <= 1 ? 'disabled' : ''}>Delete</button>
+      </td>
+    </tr>`;
+  }).join('');
+  openDialog('Manage worlds', `
+    <p class="dlg-hint">Each world is a separate, self-contained dataset. Switching is instant. All worlds live in this browser \u2014 export any world to keep a backup or move it to another device.</p>
+    <table class="data-table world-table"><tbody>${rows}</tbody></table>
+    <div class="world-add-row">
+      <button class="btn btn-moss btn-sm" id="worldNewBlank">+ New empty world</button>
+      <button class="btn btn-moss btn-sm" id="worldImportNew">Import world from file\u2026</button>
+    </div>
+  `, null, { wide: true, hideSave: true });
+
+  const dlg = document.getElementById('dialogBody');
+  dlg.querySelectorAll('[data-world-switch]').forEach(b => b.addEventListener('click', async () => { await switchWorld(b.dataset.worldSwitch); closeDialog(); currentScreen = 'home'; render(); }));
+  dlg.querySelectorAll('[data-world-rename]').forEach(b => b.addEventListener('click', async () => {
+    const w = library.worlds.find(x => x.id === b.dataset.worldRename);
+    const name = prompt('Rename world:', w.name);
+    if (name && name.trim()) { await renameWorld(w.id, name.trim()); openWorldManager(); }
+  }));
+  dlg.querySelectorAll('[data-world-dupe]').forEach(b => b.addEventListener('click', async () => { await duplicateWorld(b.dataset.worldDupe); openWorldManager(); }));
+  dlg.querySelectorAll('[data-world-export]').forEach(b => b.addEventListener('click', () => exportWorld(b.dataset.worldExport)));
+  dlg.querySelectorAll('[data-world-delete]').forEach(b => b.addEventListener('click', async () => {
+    const w = library.worlds.find(x => x.id === b.dataset.worldDelete);
+    if (confirm(`Delete world "${w.name}"? This cannot be undone (export it first if you want a backup).`)) {
+      await deleteWorld(w.id);
+      if (currentScreen !== 'home') currentScreen = 'home';
+      openWorldManager();
+    }
+  }));
+  document.getElementById('worldNewBlank').addEventListener('click', async () => {
+    const name = prompt('Name for the new empty world:', 'New World');
+    if (name && name.trim()) { await createWorld(name.trim(), blankWorldData()); closeDialog(); currentScreen = 'home'; render(); }
+  });
+  document.getElementById('worldImportNew').addEventListener('click', () => { closeDialog(); triggerImport('newWorld'); });
+}
+
+/* ===================== Export / Import ===================== */
+function exportWorld(worldId) {
+  const w = library.worlds.find(x => x.id === worldId);
+  if (!w) return;
+  const payload = { appVersion: 2, exportedAt: new Date().toISOString(), worldName: w.name, data: w.data };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const safe = w.name.replace(/[^a-z0-9\-_]+/gi, '-').replace(/^-+|-+$/g, '').toLowerCase() || 'world';
+  a.href = url;
+  a.download = `item-ledger-${safe}-${new Date().toISOString().slice(0, 10)}.json`;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function triggerImport(mode) {
+  document.getElementById('importFileInput').click();
+}
+
+function normaliseImportedData(parsed) {
+  let data, name;
+  if (parsed.data && Array.isArray(parsed.data.items)) { data = parsed.data; name = parsed.worldName || 'Imported World'; }
+  else if (Array.isArray(parsed.items)) { data = parsed; name = 'Imported World'; }
+  else throw new Error('this does not look like an Item Ledger export file');
+  const clean = blankWorldData();
+  clean.items = data.items || [];
+  clean.components = data.components || [];
+  clean.professions = data.professions || [];
+  clean.skillLevels = data.skillLevels || [];
+  clean.categories = data.categories || [];
+  clean.saleUnits = data.saleUnits || [];
+  clean.itemProfessions = data.itemProfessions || [];
+  clean.categoryGroups = data.categoryGroups || [];
+  for (const c of clean.categories) { if (!('groupId' in c)) c.groupId = null; }
+  return { data: clean, name };
+}
+
+function importDataFromFile(file) {
+  const reader = new FileReader();
+  reader.onload = async e => {
+    try {
+      const parsed = JSON.parse(e.target.result);
+      const { data, name } = normaliseImportedData(parsed);
+      const suggested = prompt('Import as a new world named:', name);
+      if (suggested === null) return;
+      await createWorld(suggested.trim() || name, data);
+      currentScreen = 'home';
+      render();
+      alert('Import complete. The imported world is now active.');
+    } catch (err) {
+      alert('Could not import this file: ' + err.message);
+    }
+  };
+  reader.readAsText(file);
+}
+
+/* ===================== Modal dialog ===================== */
+let dialogOnSave = null;
+function openDialog(title, bodyHtml, onSave, opts) {
+  opts = opts || {};
+  dialogOnSave = onSave;
+  const overlay = document.getElementById('dialogOverlay');
+  overlay.innerHTML = `
+    <div class="dialog ${opts.wide ? 'dialog-wide' : ''}">
+      <div class="dialog-head">${escapeHtml(title)}</div>
+      <div class="dialog-body" id="dialogBody">${bodyHtml}</div>
+      <div class="dialog-foot">
+        <button class="btn" id="dialogCancel">${opts.hideSave ? 'Close' : 'Cancel'}</button>
+        ${opts.hideSave ? '' : '<button class="btn btn-brass" id="dialogSave">Save</button>'}
+      </div>
+    </div>
+  `;
+  overlay.style.display = 'flex';
+  document.getElementById('dialogCancel').addEventListener('click', closeDialog);
+  const saveBtn = document.getElementById('dialogSave');
+  if (saveBtn) saveBtn.addEventListener('click', () => { if (dialogOnSave && dialogOnSave() !== false) closeDialog(); });
+  const firstInput = overlay.querySelector('input, select, textarea');
+  if (firstInput) firstInput.focus();
+  overlay.onclick = ev => { if (ev.target === overlay) closeDialog(); };
+}
+function closeDialog() {
+  const overlay = document.getElementById('dialogOverlay');
+  overlay.style.display = 'none';
+  overlay.innerHTML = '';
+  dialogOnSave = null;
+}
+
+/* ===================== Sidebar (catalogue) ===================== */
+/* ===================== Item editor (separate page, draft model) =====================
+   Editing works on a deep-copied draft. Components and labour for the draft are
+   held on the draft object itself (draft._components / draft._professions) so the
+   live totals can be computed without touching saved state. Nothing is written to
+   the world until Save. Cancel/back discards the draft. */
+
+function openNewItemEditor() {
+  const firstCat = state.categories[0];
+  const firstUnit = state.saleUnits[0];
+  draftIsNew = true;
+  draftItem = {
+    id: nextId(state.items),
+    name: '', categoryId: firstCat ? firstCat.id : null, isMagic: false,
+    weightLbs: 0, minSaleQty: 1, saleUnitId: firstUnit ? firstUnit.id : null,
+    baseMeasureQty: 0, markupAmount: 0, description: '', craftingDescription: '',
+    _components: [],
+    _professions: []
+  };
+  navigate('editor');
+}
+
+function openEditItemEditor(id) {
+  const item = getItem(id);
+  if (!item) return;
+  selectedItemId = id;
+  draftIsNew = false;
+  draftItem = JSON.parse(JSON.stringify(item));
+  // pull this item's component + labour rows into the draft as working copies
+  draftItem._components = componentsOf(id).map(c => ({ ...c }));
+  draftItem._professions = professionsOf(id).map(ip => ({ ...ip }));
+  navigate('editor');
+}
+
+function discardDraftAndReturn() {
+  draftItem = null;
+  draftIsNew = false;
+  navigate('catalogue');
+}
+
+function cancelEditor() {
+  // Only confirm if something could have changed (always, to be safe and simple)
+  if (confirm('Discard changes and return to the list?')) discardDraftAndReturn();
+}
+
+/* ---- Draft-scoped calculation ----
+   We temporarily splice the draft's components/professions into a shadow copy of
+   the relevant arrays, compute, then restore. This keeps the existing engine
+   intact while letting the draft's unsaved edits drive the live totals. */
+function computeDraftResult() {
+  const d = draftItem;
+  // Build temporary arrays: replace this item's rows with the draft's rows,
+  // and (for a new item) include the draft item itself in items.
+  const savedItems = state.items;
+  const savedComps = state.components;
+  const savedProfs = state.itemProfessions;
+
+  const itemsTmp = draftIsNew ? savedItems.concat([d]) : savedItems.map(it => it.id === d.id ? d : it);
+  const compsTmp = savedComps.filter(c => c.parentItemId !== d.id).concat(d._components.map(c => ({ ...c, parentItemId: d.id })));
+  const profsTmp = savedProfs.filter(ip => ip.itemId !== d.id).concat(d._professions.map(ip => ({ ...ip, itemId: d.id })));
+
+  state.items = itemsTmp;
+  state.components = compsTmp;
+  state.itemProfessions = profsTmp;
+  invalidateParentIndex();
+  const memo = rebuildCalcCache();
+  const result = memo.get(d.id) || { materialsTotal: 0, labourTotal: 0, totalCost: 0, itemValue: 0, catalogueValue: 0, catalogueWeight: 0 };
+  // capture component unit values for the grid (from the same memo)
+  const compUnitValues = new Map();
+  for (const c of d._components) {
+    const r = memo.get(c.componentItemId);
+    compUnitValues.set(c.componentItemId, r ? r.catalogueValue : 0);
+  }
+
+  // restore
+  state.items = savedItems;
+  state.components = savedComps;
+  state.itemProfessions = savedProfs;
+  invalidateParentIndex();
+  rebuildCalcCache();
+
+  return { result, compUnitValues };
+}
+
+function renderEditorPage(app) {
+  if (!draftItem) { navigate('catalogue'); return; }
+  const item = draftItem;
+
+  const catOptions = state.categories.slice().sort((a, b) => a.name.localeCompare(b.name))
+    .map(c => `<option value="${c.id}" ${c.id === item.categoryId ? 'selected' : ''}>${escapeHtml(c.name)}</option>`).join('');
+  const unitOptions = state.saleUnits.slice().sort((a, b) => a.name.localeCompare(b.name))
+    .map(u => `<option value="${u.id}" ${u.id === item.saleUnitId ? 'selected' : ''}>${escapeHtml(u.name)}</option>`).join('');
+
+  app.innerHTML = `
+    <div class="screen-head editor-head-bar">
+      <button class="btn btn-ghost btn-sm" id="editorBackBtn">\u2190 List</button>
+      <h2>${draftIsNew ? 'Add item' : 'Edit item'}</h2>
+      <div class="editor-head-actions">
+        <button class="btn" id="editorCancelBtn">Cancel</button>
+        <button class="btn btn-brass" id="editorSaveBtn">Save item</button>
+      </div>
+    </div>
+    <div class="editor-page">
+      <div class="editor-header">
+        <input id="itemNameInput" class="item-name-input" type="text" placeholder="Item name" value="${escapeHtmlAttr(item.name)}" />
+      </div>
+
+      <div class="desc-grid desc-top desc-top-single">
+        <div class="field"><label for="f-desc">Description</label><textarea id="f-desc">${escapeHtml(item.description)}</textarea></div>
+      </div>
+
+      <div class="field-grid field-grid-slim">
+        <div class="field"><label for="f-category">Category</label><select id="f-category"><option value="__add__">+ Add new category\u2026</option>${catOptions}</select></div>
+        <div class="field field-checkbox"><input type="checkbox" id="f-magic" ${item.isMagic ? 'checked' : ''} /><label for="f-magic">Magic item</label></div>
+      </div>
+
+      <div class="panels">
+        <div class="panel">
+          <p class="panel-title">Components</p>
+          <div id="componentsGridWrap"></div>
+          <div class="add-row" id="addComponentRow"></div>
+          <div class="panel-subtotal"><span>Components total</span><span class="val" id="materialsTotalVal"></span></div>
+        </div>
+        <div class="panel">
+          <p class="panel-title">Labour</p>
+          <div id="professionsGridWrap"></div>
+          <div class="add-row" id="addProfessionRow"></div>
+          <div class="panel-subtotal"><span>Labour total</span><span class="val" id="labourTotalVal"></span></div>
+        </div>
+      </div>
+
+      <div class="totals-block">
+        <div class="totals-strip">
+          <div class="t-item"><span class="t-label">Total cost</span><span class="t-val" id="totalCostVal"></span></div>
+          <div class="t-item"><span class="t-label">Markup</span><input type="number" id="f-markup" step="0.0001" value="${fmtNum(item.markupAmount)}" /></div>
+          <div class="t-item t-final"><span class="t-label">Item value</span><span class="t-val" id="itemValueVal"></span></div>
+        </div>
+        <div class="sale-fields">
+          <div class="field"><label for="f-weight">Item weight (lbs)</label><input type="number" id="f-weight" step="0.0001" value="${fmtNum(item.weightLbs)}" /></div>
+          <div class="field"><label for="f-saleunit">Sale unit</label><select id="f-saleunit"><option value="__add__">+ Add new sale unit\u2026</option>${unitOptions}</select></div>
+          <div class="field"><label for="f-minqty">Minimum sale quantity</label><input type="number" id="f-minqty" step="0.0001" value="${fmtNum(item.minSaleQty)}" /></div>
+          <div class="field"><label for="f-baseqty">Base measure quantity</label><input type="number" id="f-baseqty" step="0.01" value="${(Number(item.baseMeasureQty) || 0).toFixed(2)}" /></div>
+        </div>
+        <div class="catalogue-strip">
+          <div><div class="c-label">Catalogue value (per sale unit)</div><div class="c-val" id="catValueVal"></div></div>
+          <div><div class="c-label">Catalogue weight (per sale unit, lbs)</div><div class="c-val" id="catWeightVal"></div></div>
+        </div>
+      </div>
+
+      <div class="desc-grid desc-bottom">
+        <div class="field"><label for="f-craft">Crafting description</label><textarea id="f-craft">${escapeHtml(item.craftingDescription)}</textarea></div>
+      </div>
+    </div>
+  `;
+
+  document.getElementById('editorBackBtn').addEventListener('click', cancelEditor);
+  document.getElementById('editorCancelBtn').addEventListener('click', cancelEditor);
+  document.getElementById('editorSaveBtn').addEventListener('click', saveDraft);
+
+  document.getElementById('itemNameInput').addEventListener('input', e => { item.name = e.target.value; });
+  document.getElementById('f-category').addEventListener('change', e => {
+    if (e.target.value === '__add__') { e.target.value = item.categoryId != null ? item.categoryId : ''; addNewCategoryInline(); return; }
+    item.categoryId = Number(e.target.value);
+  });
+  document.getElementById('f-magic').addEventListener('change', e => { item.isMagic = e.target.checked; });
+  document.getElementById('f-weight').addEventListener('input', e => { item.weightLbs = parseFloat(e.target.value) || 0; updateDraftTotals(); });
+  document.getElementById('f-saleunit').addEventListener('change', e => {
+    if (e.target.value === '__add__') { e.target.value = item.saleUnitId != null ? item.saleUnitId : ''; addNewSaleUnitInline(); return; }
+    item.saleUnitId = Number(e.target.value); updateDraftTotals();
+  });
+  document.getElementById('f-minqty').addEventListener('input', e => { item.minSaleQty = parseFloat(e.target.value) || 0; updateDraftTotals(); });
+  document.getElementById('f-baseqty').addEventListener('input', e => { item.baseMeasureQty = Math.round((parseFloat(e.target.value) || 0) * 100) / 100; updateDraftTotals(); });
+  document.getElementById('f-markup').addEventListener('input', e => { item.markupAmount = parseFloat(e.target.value) || 0; updateDraftTotals(); });
+  document.getElementById('f-desc').addEventListener('input', e => { item.description = e.target.value; });
+  document.getElementById('f-craft').addEventListener('input', e => { item.craftingDescription = e.target.value; });
+
+  renderDraftComponentsGrid();
+  renderDraftProfessionsGrid();
+  renderDraftAddComponentRow();
+  renderDraftAddProfessionRow();
+  updateDraftTotals();
+
+  // add-new sits at the top of these selects, so explicitly select the real value
+  const catSel = document.getElementById('f-category');
+  if (catSel && item.categoryId != null) catSel.value = String(item.categoryId);
+  const unitSel = document.getElementById('f-saleunit');
+  if (unitSel && item.saleUnitId != null) unitSel.value = String(item.saleUnitId);
+}
+
+/* ===================== Inline "add new" from editor dropdowns =====================
+   These create a real record in the world's tables (persists immediately, even
+   if the item draft is later cancelled - you genuinely made a new category etc.)
+   then select it on the draft and refresh the relevant control without leaving
+   the editor page. */
+
+function refreshCategorySelect() {
+  const sel = document.getElementById('f-category');
+  if (!sel) return;
+  const opts = state.categories.slice().sort((a, b) => a.name.localeCompare(b.name))
+    .map(c => `<option value="${c.id}" ${c.id === draftItem.categoryId ? 'selected' : ''}>${escapeHtml(c.name)}</option>`).join('');
+  sel.innerHTML = '<option value="__add__">+ Add new category\u2026</option>' + opts;
+}
+function addNewCategoryInline() {
+  openDialog('Add category', `
+    <div class="field"><label>Category name</label><input type="text" id="dlg-name" /></div>
+    <div class="field"><label>Description (optional)</label><textarea id="dlg-desc"></textarea></div>
+  `, () => {
+    const name = document.getElementById('dlg-name').value.trim();
+    if (!name) { alert('Please enter a name.'); return false; }
+    const id = nextId(state.categories);
+    state.categories.push({ id, name, description: document.getElementById('dlg-desc').value });
+    draftItem.categoryId = id;
+    saveState();
+    refreshCategorySelect();
+    return true;
+  });
+}
+
+function refreshSaleUnitSelect() {
+  const sel = document.getElementById('f-saleunit');
+  if (!sel) return;
+  const opts = state.saleUnits.slice().sort((a, b) => a.name.localeCompare(b.name))
+    .map(u => `<option value="${u.id}" ${u.id === draftItem.saleUnitId ? 'selected' : ''}>${escapeHtml(u.name)}</option>`).join('');
+  sel.innerHTML = '<option value="__add__">+ Add new sale unit\u2026</option>' + opts;
+}
+function addNewSaleUnitInline() {
+  const types = ['weight', 'count', 'measure'];
+  const typeOpts = types.map(t => `<option value="${t}">${t}</option>`).join('');
+  openDialog('Add sale unit', `
+    <div class="field"><label>Sale unit name</label><input type="text" id="dlg-name" /></div>
+    <div class="field"><label>Type</label><select id="dlg-type">${typeOpts}</select></div>
+    <p class="dlg-hint"><strong>weight</strong>: priced by share of the item's weight. <strong>count</strong> / <strong>measure</strong>: priced by share of the base measure quantity.</p>
+  `, () => {
+    const name = document.getElementById('dlg-name').value.trim();
+    if (!name) { alert('Please enter a name.'); return false; }
+    const id = nextId(state.saleUnits);
+    state.saleUnits.push({ id, name, type: document.getElementById('dlg-type').value });
+    draftItem.saleUnitId = id;
+    saveState();
+    refreshSaleUnitSelect();
+    updateDraftTotals();
+    return true;
+  });
+}
+
+function addNewProfessionInline(selectEl) {
+  const skillOpts = state.skillLevels.slice().sort((a, b) => a.id - b.id)
+    .map(s => `<option value="${s.id}">${escapeHtml(s.name)} (${fmtCurrency2(s.dayRate)}/day)</option>`).join('');
+  openDialog('Add profession', `
+    <div class="field"><label>Profession name</label><input type="text" id="dlg-name" /></div>
+    <div class="field"><label>Skill level</label><select id="dlg-skill">${skillOpts}</select></div>
+  `, () => {
+    const name = document.getElementById('dlg-name').value.trim();
+    if (!name) { alert('Please enter a name.'); return false; }
+    const skillVal = document.getElementById('dlg-skill').value;
+    if (skillVal === '__addskill__') { alert('Please choose a skill level (or add one first from the Skill Levels screen).'); return false; }
+    const id = nextId(state.professions);
+    state.professions.push({ id, name, skillLevelId: Number(skillVal), description: '' });
+    saveState();
+    renderDraftAddProfessionRow();
+    // preselect the new profession in the add-labour dropdown
+    const newSel = document.getElementById('newProfSelect');
+    if (newSel) newSel.value = String(id);
+    return true;
+  });
+}
+
+function quickAddComponentItemInline() {
+  openDialog('Quick-add item', `
+    <p class="dlg-hint">Creates a basic item with just a name, so you can use it as a component now and fill in its details later from the catalogue list. It will be tagged <em>incomplete</em> until you edit it.</p>
+    <div class="field"><label>Item name</label><input type="text" id="dlg-name" /></div>
+  `, () => {
+    const name = document.getElementById('dlg-name').value.trim();
+    if (!name) { alert('Please enter a name.'); return false; }
+    const firstCat = state.categories[0];
+    const firstUnit = state.saleUnits[0];
+    const id = nextId(state.items);
+    state.items.push({
+      id, name, categoryId: firstCat ? firstCat.id : null, isMagic: false,
+      weightLbs: 0, minSaleQty: 1, saleUnitId: firstUnit ? firstUnit.id : null,
+      baseMeasureQty: 0, markupAmount: 0, description: '', craftingDescription: '',
+      isStub: true
+    });
+    saveState();
+    invalidateAll();
+    renderDraftAddComponentRow();
+    const newSel = document.getElementById('newCompSelect');
+    if (newSel) newSel.value = String(id);
+    return true;
+  });
+}
+
+function saveDraft() {
+  const d = draftItem;
+  if (!d.name || !d.name.trim()) { alert('Please enter an item name before saving.'); return; }
+  d.name = d.name.trim();
+
+  // Strip working fields off the item record
+  const components = d._components;
+  const professions = d._professions;
+  const clean = { ...d };
+  delete clean._components;
+  delete clean._professions;
+  delete clean.isStub; // editing + saving means it's no longer an incomplete stub
+
+  if (draftIsNew) {
+    state.items.push(clean);
+  } else {
+    const idx = state.items.findIndex(i => i.id === d.id);
+    if (idx >= 0) state.items[idx] = clean; else state.items.push(clean);
+  }
+
+  // Replace this item's component rows with the draft's, assigning fresh ids
+  state.components = state.components.filter(c => c.parentItemId !== d.id);
+  for (const c of components) {
+    state.components.push({
+      id: nextId(state.components),
+      parentItemId: d.id,
+      componentItemId: c.componentItemId,
+      quantity: c.quantity || 0
+    });
+  }
+  // Same for labour rows
+  state.itemProfessions = state.itemProfessions.filter(ip => ip.itemId !== d.id);
+  for (const ip of professions) {
+    state.itemProfessions.push({
+      id: nextId(state.itemProfessions),
+      itemId: d.id,
+      professionId: ip.professionId,
+      numWorkers: ip.numWorkers || 0,
+      craftingDays: ip.craftingDays || 0
+    });
+  }
+
+  selectedItemId = d.id;
+  draftItem = null;
+  draftIsNew = false;
+  invalidateAll();
+  saveState();
+  navigate('catalogue');
+}
+
+/* ---- Draft components grid ---- */
+function renderDraftComponentsGrid() {
+  const wrap = document.getElementById('componentsGridWrap');
+  if (!wrap) return;
+  const rows = draftItem._components;
+  if (rows.length === 0) { wrap.innerHTML = '<p style="color:var(--ink-faint);font-size:13px;margin:4px 0;">No components yet.</p>'; return; }
+  const { compUnitValues } = computeDraftResult();
+  let html = `<table class="grid-table"><thead><tr>
+      <th>Component</th><th class="num">Unit value</th><th class="num">Qty</th><th class="num">Cost</th><th></th>
+    </tr></thead><tbody>`;
+  rows.forEach((c, idx) => {
+    const compItem = getItem(c.componentItemId);
+    const unitVal = compUnitValues.get(c.componentItemId) || 0;
+    const lineCost = (c.quantity || 0) * unitVal;
+    html += `<tr>
+      <td class="row-name">${escapeHtml(compItem ? compItem.name : 'Unknown item')}</td>
+      <td class="num">${fmtCurrency(unitVal)}</td>
+      <td class="num"><input type="number" step="0.0001" value="${fmtNum(c.quantity)}" data-draft-comp-qty="${idx}" /></td>
+      <td class="num line-cost">${fmtCurrency(lineCost)}</td>
+      <td><button class="row-del" data-draft-comp-del="${idx}" title="Remove">\u00d7</button></td>
+    </tr>`;
+  });
+  html += '</tbody></table>';
+  wrap.innerHTML = html;
+  wrap.querySelectorAll('[data-draft-comp-qty]').forEach(inp => {
+    inp.addEventListener('input', e => {
+      const idx = Number(e.target.dataset.draftCompQty);
+      draftItem._components[idx].quantity = parseFloat(e.target.value) || 0;
+      updateDraftTotals();
+      // update just this row's line cost without full re-render (keep focus)
+      const { compUnitValues } = computeDraftResult();
+      const c = draftItem._components[idx];
+      const cell = e.target.closest('tr').querySelector('.line-cost');
+      if (cell) cell.textContent = fmtCurrency((c.quantity || 0) * (compUnitValues.get(c.componentItemId) || 0));
+    });
+  });
+  wrap.querySelectorAll('[data-draft-comp-del]').forEach(btn => {
+    btn.addEventListener('click', e => {
+      const idx = Number(e.target.dataset.draftCompDel);
+      draftItem._components.splice(idx, 1);
+      renderDraftComponentsGrid();
+      renderDraftAddComponentRow();
+      updateDraftTotals();
+    });
+  });
+}
+
+function renderDraftAddComponentRow() {
+  const wrap = document.getElementById('addComponentRow');
+  if (!wrap) return;
+  // Items selectable as components: everything except the draft item itself,
+  // and (when editing) anything that would form a cycle.
+  const others = state.items.filter(i => i.id !== draftItem.id).slice().sort((a, b) => a.name.localeCompare(b.name));
+  const options = others.map(i => `<option value="${i.id}">${escapeHtml(i.name)}${i.isStub ? ' \u00b7 incomplete' : ''}</option>`).join('');
+  wrap.innerHTML = `
+    <select id="newCompSelect"><option value="__add__">+ Quick-add new item\u2026</option>${options}</select>
+    <input type="number" id="newCompQty" step="0.0001" value="1.0000" />
+    <button class="btn btn-moss btn-sm" id="newCompAddBtn">+ Add component</button>
+    <div class="add-row-error" id="newCompError" style="display:none;"></div>
+  `;
+  document.getElementById('newCompSelect').addEventListener('change', e => {
+    if (e.target.value === '__add__') { e.target.value = ''; quickAddComponentItemInline(); }
+  });
+  // default to first real item rather than the add-new row
+  { const s = document.getElementById('newCompSelect'); if (s && others.length) s.value = String(others[0].id); }
+  document.getElementById('newCompAddBtn').addEventListener('click', () => {
+    const val = document.getElementById('newCompSelect').value;
+    if (val === '__add__' || val === '') return;
+    const compId = Number(val);
+    const qty = parseFloat(document.getElementById('newCompQty').value) || 0;
+    const errEl = document.getElementById('newCompError');
+    if (!compId) return;
+    if (draftWouldCreateCycle(compId)) {
+      errEl.textContent = 'Cannot add: this would create a circular reference (this item already appears in that component\'s own chain).';
+      errEl.style.display = 'block'; return;
+    }
+    if (draftItem._components.some(c => c.componentItemId === compId)) {
+      errEl.textContent = 'That item is already a component. Adjust its quantity instead.';
+      errEl.style.display = 'block'; return;
+    }
+    errEl.style.display = 'none';
+    draftItem._components.push({ componentItemId: compId, quantity: qty });
+    renderDraftComponentsGrid();
+    renderDraftAddComponentRow();
+    updateDraftTotals();
+  });
+}
+
+/* Cycle check against saved graph + the draft's current component set */
+function draftWouldCreateCycle(candidateComponentId) {
+  const did = draftItem.id;
+  if (candidateComponentId === did) return true;
+  // Walk down from candidate using saved components; if we reach the draft item, cycle.
+  const stack = [candidateComponentId];
+  const seen = new Set();
+  while (stack.length) {
+    const cur = stack.pop();
+    if (cur === did) return true;
+    if (seen.has(cur)) continue;
+    seen.add(cur);
+    for (const c of componentsOf(cur)) stack.push(c.componentItemId);
+  }
+  return false;
+}
+
+/* ---- Draft labour grid ---- */
+function renderDraftProfessionsGrid() {
+  const wrap = document.getElementById('professionsGridWrap');
+  if (!wrap) return;
+  const rows = draftItem._professions;
+  if (rows.length === 0) { wrap.innerHTML = '<p style="color:var(--ink-faint);font-size:13px;margin:4px 0;">No labour entries yet.</p>'; return; }
+  let html = `<table class="grid-table"><thead><tr>
+      <th>Profession</th><th class="num">Day rate</th><th class="num">Workers</th><th class="num">Days</th><th class="num">Cost</th><th></th>
+    </tr></thead><tbody>`;
+  rows.forEach((ip, idx) => {
+    const prof = getProfession(ip.professionId);
+    const sk = prof ? getSkillLevel(prof.skillLevelId) : null;
+    const dayRate = sk ? (sk.dayRate || 0) : 0;
+    const lineCost = (ip.numWorkers || 0) * (ip.craftingDays || 0) * dayRate;
+    html += `<tr>
+      <td class="row-name">${escapeHtml(prof ? prof.name : 'Unknown profession')}</td>
+      <td class="num">${fmtCurrency(dayRate)}</td>
+      <td class="num"><input type="number" step="1" value="${ip.numWorkers}" data-draft-prof-workers="${idx}" /></td>
+      <td class="num"><input type="number" step="0.0001" value="${fmtNum(ip.craftingDays)}" data-draft-prof-days="${idx}" /></td>
+      <td class="num line-cost">${fmtCurrency(lineCost)}</td>
+      <td><button class="row-del" data-draft-prof-del="${idx}" title="Remove">\u00d7</button></td>
+    </tr>`;
+  });
+  html += '</tbody></table>';
+  wrap.innerHTML = html;
+  wrap.querySelectorAll('[data-draft-prof-workers]').forEach(inp => {
+    inp.addEventListener('input', e => {
+      const idx = Number(e.target.dataset.draftProfWorkers);
+      draftItem._professions[idx].numWorkers = parseFloat(e.target.value) || 0;
+      updateDraftRowLabourCost(e.target.closest('tr'), idx);
+      updateDraftTotals();
+    });
+  });
+  wrap.querySelectorAll('[data-draft-prof-days]').forEach(inp => {
+    inp.addEventListener('input', e => {
+      const idx = Number(e.target.dataset.draftProfDays);
+      draftItem._professions[idx].craftingDays = parseFloat(e.target.value) || 0;
+      updateDraftRowLabourCost(e.target.closest('tr'), idx);
+      updateDraftTotals();
+    });
+  });
+  wrap.querySelectorAll('[data-draft-prof-del]').forEach(btn => {
+    btn.addEventListener('click', e => {
+      const idx = Number(e.target.dataset.draftProfDel);
+      draftItem._professions.splice(idx, 1);
+      renderDraftProfessionsGrid();
+      updateDraftTotals();
+    });
+  });
+}
+
+function updateDraftRowLabourCost(tr, idx) {
+  const ip = draftItem._professions[idx];
+  const prof = getProfession(ip.professionId);
+  const sk = prof ? getSkillLevel(prof.skillLevelId) : null;
+  const dayRate = sk ? (sk.dayRate || 0) : 0;
+  const cell = tr.querySelector('.line-cost');
+  if (cell) cell.textContent = fmtCurrency((ip.numWorkers || 0) * (ip.craftingDays || 0) * dayRate);
+}
+
+function renderDraftAddProfessionRow() {
+  const wrap = document.getElementById('addProfessionRow');
+  if (!wrap) return;
+  const profs = state.professions.slice().sort((a, b) => a.name.localeCompare(b.name));
+  const options = profs.map(p => `<option value="${p.id}">${escapeHtml(p.name)}</option>`).join('');
+  wrap.innerHTML = `
+    <select id="newProfSelect"><option value="__add__">+ Add new profession\u2026</option>${options}</select>
+    <input type="number" id="newProfWorkers" step="1" value="1" title="Workers" />
+    <input type="number" id="newProfDays" step="0.0001" value="1.0000" title="Days" />
+    <button class="btn btn-moss btn-sm" id="newProfAddBtn">+ Add labour</button>
+  `;
+  document.getElementById('newProfSelect').addEventListener('change', e => {
+    if (e.target.value === '__add__') { e.target.value = ''; addNewProfessionInline(); }
+  });
+  { const s = document.getElementById('newProfSelect'); if (s && profs.length) s.value = String(profs[0].id); }
+  document.getElementById('newProfAddBtn').addEventListener('click', () => {
+    const val = document.getElementById('newProfSelect').value;
+    if (val === '__add__' || val === '') return;
+    const profId = Number(val);
+    const workers = parseFloat(document.getElementById('newProfWorkers').value) || 0;
+    const days = parseFloat(document.getElementById('newProfDays').value) || 0;
+    if (!profId) return;
+    draftItem._professions.push({ professionId: profId, numWorkers: workers, craftingDays: days });
+    renderDraftProfessionsGrid();
+    updateDraftTotals();
+  });
+}
+
+function updateDraftTotals() {
+  const { result } = computeDraftResult();
+  const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+  set('materialsTotalVal', fmtCurrency(result.materialsTotal));
+  set('labourTotalVal', fmtCurrency(result.labourTotal));
+  set('totalCostVal', fmtCurrency(result.totalCost));
+  set('itemValueVal', fmtCurrency(result.itemValue));
+  set('catValueVal', fmtCurrency(result.catalogueValue));
+  set('catWeightVal', fmtNum(result.catalogueWeight) + ' lbs');
+  const finalEl = document.getElementById('itemValueVal');
+  if (finalEl && finalEl.closest('.t-final')) flashEl(finalEl.closest('.t-final'));
+}
+
+/* ===================== Utilities ===================== */
+function escapeHtml(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
+}
+function escapeHtmlAttr(s) { return escapeHtml(s); }
+
+/* ===================== Boot ===================== */
+async function boot() {
+  document.getElementById('importFileInput').addEventListener('change', e => {
+    if (e.target.files && e.target.files[0]) importDataFromFile(e.target.files[0]);
+    e.target.value = '';
+  });
+  const appRoot = document.getElementById('appRoot');
+  appRoot.innerHTML = '<div class="empty-state">Loading\u2026</div>';
+  try {
+    await initStorage();
+    render();
+  } catch (e) {
+    console.error(e);
+    appRoot.innerHTML = '<div class="empty-state">Could not open local database. If you are in a private/incognito window, try a normal window.</div>';
+  }
+}
+document.addEventListener('DOMContentLoaded', boot);
+
+</script>
+<script>
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', function () {
+    navigator.serviceWorker.register('sw.js').catch(function (e) {
+      console.log('Service worker not registered (fine if opened as a local file):', e && e.message);
+    });
+  });
+}
+</script>
+</body>
+</html>
