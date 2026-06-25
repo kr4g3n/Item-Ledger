@@ -686,6 +686,30 @@ input[type="number"] {
 .list-cat-toggle.indented { padding-left: 30px; }
 .list-row.indented .lr-name { padding-left: 28px; }
 
+/* Bottom section: 3-up sale fields row (units / sale unit / min qty) */
+.sale-fields-3 { grid-template-columns: repeat(3, 1fr); }
+/* Totals strip now also carries item weight as a 4th cell; let it wrap gracefully */
+.totals-block .totals-strip { flex-wrap: wrap; gap: 14px 22px; }
+.totals-block .totals-strip .t-item { min-width: 120px; }
+
+/* Editor header: item name on the left, category + magic toggle on the right */
+.editor-header { flex-wrap: wrap; align-items: flex-end; }
+.editor-header .item-name-input { flex: 1 1 280px; }
+.editor-header-meta {
+  display: flex; align-items: flex-end; gap: 18px; flex: 0 0 auto;
+}
+.editor-header-meta .field { display: flex; flex-direction: column; gap: 4px; }
+.editor-header-meta .field label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--ink-faint); }
+.editor-header-meta select { min-width: 150px; }
+.editor-header-meta .field-checkbox { flex-direction: row; align-items: center; gap: 7px; padding-bottom: 6px; }
+.editor-header-meta .field-checkbox label { text-transform: none; letter-spacing: 0; font-size: 13px; color: var(--ink-soft); }
+
+@media (max-width: 640px) {
+  .editor-header-meta { width: 100%; gap: 14px; }
+  .editor-header-meta select { min-width: 0; }
+  .editor-header-meta .field:first-child { flex: 1; }
+}
+
 </style>
 </head>
 <body>
@@ -1877,7 +1901,8 @@ function openNewItemEditor() {
     weightLbs: 0, minSaleQty: 1, saleUnitId: firstUnit ? firstUnit.id : null,
     baseMeasureQty: 0, markupAmount: 0, description: '', craftingDescription: '',
     _components: [],
-    _professions: []
+    _professions: [],
+    _baseQtyUntouched: true   // for NEW items, units-produced follows weight until edited
   };
   navigate('editor');
 }
@@ -1965,15 +1990,14 @@ function renderEditorPage(app) {
     <div class="editor-page">
       <div class="editor-header">
         <input id="itemNameInput" class="item-name-input" type="text" placeholder="Item name" value="${escapeHtmlAttr(item.name)}" />
+        <div class="editor-header-meta">
+          <div class="field"><label for="f-category">Category</label><select id="f-category"><option value="__add__">+ Add new category\u2026</option>${catOptions}</select></div>
+          <div class="field field-checkbox"><input type="checkbox" id="f-magic" ${item.isMagic ? 'checked' : ''} /><label for="f-magic">Magic item</label></div>
+        </div>
       </div>
 
       <div class="desc-grid desc-top desc-top-single">
         <div class="field"><label for="f-desc">Description</label><textarea id="f-desc">${escapeHtml(item.description)}</textarea></div>
-      </div>
-
-      <div class="field-grid field-grid-slim">
-        <div class="field"><label for="f-category">Category</label><select id="f-category"><option value="__add__">+ Add new category\u2026</option>${catOptions}</select></div>
-        <div class="field field-checkbox"><input type="checkbox" id="f-magic" ${item.isMagic ? 'checked' : ''} /><label for="f-magic">Magic item</label></div>
       </div>
 
       <div class="panels">
@@ -1996,12 +2020,12 @@ function renderEditorPage(app) {
           <div class="t-item"><span class="t-label">Total cost</span><span class="t-val" id="totalCostVal"></span></div>
           <div class="t-item"><span class="t-label">Markup</span><input type="number" id="f-markup" step="0.0001" value="${fmtNum(item.markupAmount)}" /></div>
           <div class="t-item t-final"><span class="t-label">Item value</span><span class="t-val" id="itemValueVal"></span></div>
+          <div class="t-item"><span class="t-label">Item weight (lbs)</span><input type="number" id="f-weight" step="0.0001" value="${fmtNum(item.weightLbs)}" /></div>
         </div>
-        <div class="sale-fields">
-          <div class="field"><label for="f-weight">Item weight (lbs)</label><input type="number" id="f-weight" step="0.0001" value="${fmtNum(item.weightLbs)}" /></div>
+        <div class="sale-fields sale-fields-3">
+          <div class="field"><label for="f-baseqty">Number of units produced</label><input type="number" id="f-baseqty" step="0.01" value="${(Number(item.baseMeasureQty) || 0).toFixed(2)}" /></div>
           <div class="field"><label for="f-saleunit">Sale unit</label><select id="f-saleunit"><option value="__add__">+ Add new sale unit\u2026</option>${unitOptions}</select></div>
           <div class="field"><label for="f-minqty">Minimum sale quantity</label><input type="number" id="f-minqty" step="0.0001" value="${fmtNum(item.minSaleQty)}" /></div>
-          <div class="field"><label for="f-baseqty">Base measure quantity</label><input type="number" id="f-baseqty" step="0.01" value="${(Number(item.baseMeasureQty) || 0).toFixed(2)}" /></div>
         </div>
         <div class="catalogue-strip">
           <div><div class="c-label">Catalogue value (per sale unit)</div><div class="c-val" id="catValueVal"></div></div>
@@ -2025,13 +2049,23 @@ function renderEditorPage(app) {
     item.categoryId = Number(e.target.value);
   });
   document.getElementById('f-magic').addEventListener('change', e => { item.isMagic = e.target.checked; });
-  document.getElementById('f-weight').addEventListener('input', e => { item.weightLbs = parseFloat(e.target.value) || 0; updateDraftTotals(); });
+  document.getElementById('f-weight').addEventListener('input', e => {
+    item.weightLbs = parseFloat(e.target.value) || 0;
+    // For a new item, units-produced defaults to track the weight until the
+    // user edits it directly.
+    if (item._baseQtyUntouched) {
+      item.baseMeasureQty = Math.round(item.weightLbs * 100) / 100;
+      const bq = document.getElementById('f-baseqty');
+      if (bq) bq.value = item.baseMeasureQty.toFixed(2);
+    }
+    updateDraftTotals();
+  });
   document.getElementById('f-saleunit').addEventListener('change', e => {
     if (e.target.value === '__add__') { e.target.value = item.saleUnitId != null ? item.saleUnitId : ''; addNewSaleUnitInline(); return; }
     item.saleUnitId = Number(e.target.value); updateDraftTotals();
   });
   document.getElementById('f-minqty').addEventListener('input', e => { item.minSaleQty = parseFloat(e.target.value) || 0; updateDraftTotals(); });
-  document.getElementById('f-baseqty').addEventListener('input', e => { item.baseMeasureQty = Math.round((parseFloat(e.target.value) || 0) * 100) / 100; updateDraftTotals(); });
+  document.getElementById('f-baseqty').addEventListener('input', e => { item.baseMeasureQty = Math.round((parseFloat(e.target.value) || 0) * 100) / 100; item._baseQtyUntouched = false; updateDraftTotals(); });
   document.getElementById('f-markup').addEventListener('input', e => { item.markupAmount = parseFloat(e.target.value) || 0; updateDraftTotals(); });
   document.getElementById('f-desc').addEventListener('input', e => { item.description = e.target.value; });
   document.getElementById('f-craft').addEventListener('input', e => { item.craftingDescription = e.target.value; });
@@ -2119,10 +2153,8 @@ function addNewProfessionInline(selectEl) {
     const id = nextId(state.professions);
     state.professions.push({ id, name, skillLevelId: Number(skillVal), description: '' });
     saveState();
-    renderDraftAddProfessionRow();
-    // preselect the new profession in the add-labour dropdown
-    const newSel = document.getElementById('newProfSelect');
-    if (newSel) newSel.value = String(id);
+    // reopen the add-labour dialog with the new profession preselected
+    setTimeout(() => { openAddLabourDialog(); const s = document.getElementById('newProfSelect'); if (s) s.value = String(id); }, 0);
     return true;
   });
 }
@@ -2145,9 +2177,8 @@ function quickAddComponentItemInline() {
     });
     saveState();
     invalidateAll();
-    renderDraftAddComponentRow();
-    const newSel = document.getElementById('newCompSelect');
-    if (newSel) newSel.value = String(id);
+    // reopen the add-component dialog with the new item preselected
+    setTimeout(() => { openAddComponentDialog(); const s = document.getElementById('newCompSelect'); if (s) s.value = String(id); }, 0);
     return true;
   });
 }
@@ -2164,6 +2195,7 @@ function saveDraft() {
   delete clean._components;
   delete clean._professions;
   delete clean.isStub; // editing + saving means it's no longer an incomplete stub
+  delete clean._baseQtyUntouched;
 
   if (draftIsNew) {
     state.items.push(clean);
@@ -2252,42 +2284,45 @@ function renderDraftComponentsGrid() {
 function renderDraftAddComponentRow() {
   const wrap = document.getElementById('addComponentRow');
   if (!wrap) return;
-  // Items selectable as components: everything except the draft item itself,
-  // and (when editing) anything that would form a cycle.
+  wrap.innerHTML = `<button class="btn btn-moss btn-sm" id="newCompAddBtn">+ Add component</button>`;
+  document.getElementById('newCompAddBtn').addEventListener('click', openAddComponentDialog);
+}
+
+function openAddComponentDialog() {
   const others = state.items.filter(i => i.id !== draftItem.id).slice().sort((a, b) => a.name.localeCompare(b.name));
   const options = others.map(i => `<option value="${i.id}">${escapeHtml(i.name)}${i.isStub ? ' \u00b7 incomplete' : ''}</option>`).join('');
-  wrap.innerHTML = `
-    <select id="newCompSelect"><option value="__add__">+ Quick-add new item\u2026</option>${options}</select>
-    <input type="number" id="newCompQty" step="0.0001" value="1.0000" />
-    <button class="btn btn-moss btn-sm" id="newCompAddBtn">+ Add component</button>
+  openDialog('Add component', `
+    <div class="field"><label>Component</label><select id="newCompSelect"><option value="__add__">+ Quick-add new item\u2026</option>${options}</select></div>
+    <div class="field"><label>Quantity</label><input type="number" id="newCompQty" step="0.0001" value="1.0000" /></div>
     <div class="add-row-error" id="newCompError" style="display:none;"></div>
-  `;
-  document.getElementById('newCompSelect').addEventListener('change', e => {
-    if (e.target.value === '__add__') { e.target.value = ''; quickAddComponentItemInline(); }
-  });
-  // default to first real item rather than the add-new row
-  { const s = document.getElementById('newCompSelect'); if (s && others.length) s.value = String(others[0].id); }
-  document.getElementById('newCompAddBtn').addEventListener('click', () => {
-    const val = document.getElementById('newCompSelect').value;
-    if (val === '__add__' || val === '') return;
+  `, () => {
+    const sel = document.getElementById('newCompSelect');
+    const val = sel.value;
+    if (val === '__add__' || val === '') { alert('Please choose a component.'); return false; }
     const compId = Number(val);
     const qty = parseFloat(document.getElementById('newCompQty').value) || 0;
     const errEl = document.getElementById('newCompError');
-    if (!compId) return;
     if (draftWouldCreateCycle(compId)) {
       errEl.textContent = 'Cannot add: this would create a circular reference (this item already appears in that component\'s own chain).';
-      errEl.style.display = 'block'; return;
+      errEl.style.display = 'block'; return false;
     }
     if (draftItem._components.some(c => c.componentItemId === compId)) {
       errEl.textContent = 'That item is already a component. Adjust its quantity instead.';
-      errEl.style.display = 'block'; return;
+      errEl.style.display = 'block'; return false;
     }
-    errEl.style.display = 'none';
     draftItem._components.push({ componentItemId: compId, quantity: qty });
     renderDraftComponentsGrid();
-    renderDraftAddComponentRow();
     updateDraftTotals();
+    return true;
   });
+  // wire quick-add option and sensible default selection
+  const sel = document.getElementById('newCompSelect');
+  if (sel) {
+    if (others.length) sel.value = String(others[0].id);
+    sel.addEventListener('change', e => {
+      if (e.target.value === '__add__') { e.target.value = others.length ? String(others[0].id) : ''; closeDialog(); quickAddComponentItemInline(); }
+    });
+  }
 }
 
 /* Cycle check against saved graph + the draft's current component set */
@@ -2370,29 +2405,35 @@ function updateDraftRowLabourCost(tr, idx) {
 function renderDraftAddProfessionRow() {
   const wrap = document.getElementById('addProfessionRow');
   if (!wrap) return;
+  wrap.innerHTML = `<button class="btn btn-moss btn-sm" id="newProfAddBtn">+ Add labour</button>`;
+  document.getElementById('newProfAddBtn').addEventListener('click', openAddLabourDialog);
+}
+
+function openAddLabourDialog() {
   const profs = state.professions.slice().sort((a, b) => a.name.localeCompare(b.name));
   const options = profs.map(p => `<option value="${p.id}">${escapeHtml(p.name)}</option>`).join('');
-  wrap.innerHTML = `
-    <select id="newProfSelect"><option value="__add__">+ Add new profession\u2026</option>${options}</select>
-    <input type="number" id="newProfWorkers" step="1" value="1" title="Workers" />
-    <input type="number" id="newProfDays" step="0.0001" value="1.0000" title="Days" />
-    <button class="btn btn-moss btn-sm" id="newProfAddBtn">+ Add labour</button>
-  `;
-  document.getElementById('newProfSelect').addEventListener('change', e => {
-    if (e.target.value === '__add__') { e.target.value = ''; addNewProfessionInline(); }
-  });
-  { const s = document.getElementById('newProfSelect'); if (s && profs.length) s.value = String(profs[0].id); }
-  document.getElementById('newProfAddBtn').addEventListener('click', () => {
+  openDialog('Add labour', `
+    <div class="field"><label>Profession</label><select id="newProfSelect"><option value="__add__">+ Add new profession\u2026</option>${options}</select></div>
+    <div class="field"><label>Number of workers</label><input type="number" id="newProfWorkers" step="1" value="1" /></div>
+    <div class="field"><label>Crafting days</label><input type="number" id="newProfDays" step="0.0001" value="1.0000" /></div>
+  `, () => {
     const val = document.getElementById('newProfSelect').value;
-    if (val === '__add__' || val === '') return;
+    if (val === '__add__' || val === '') { alert('Please choose a profession.'); return false; }
     const profId = Number(val);
     const workers = parseFloat(document.getElementById('newProfWorkers').value) || 0;
     const days = parseFloat(document.getElementById('newProfDays').value) || 0;
-    if (!profId) return;
     draftItem._professions.push({ professionId: profId, numWorkers: workers, craftingDays: days });
     renderDraftProfessionsGrid();
     updateDraftTotals();
+    return true;
   });
+  const sel = document.getElementById('newProfSelect');
+  if (sel) {
+    if (profs.length) sel.value = String(profs[0].id);
+    sel.addEventListener('change', e => {
+      if (e.target.value === '__add__') { e.target.value = profs.length ? String(profs[0].id) : ''; closeDialog(); addNewProfessionInline(); }
+    });
+  }
 }
 
 function updateDraftTotals() {
