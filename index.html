@@ -389,10 +389,10 @@ input[type="number"] {
 .catalogue-strip .c-val { font-variant-numeric: tabular-nums; font-size: 15px; color: var(--brass); font-weight: 600; }
 
 .desc-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 14px;
+  display: block;
+  width: 100%;
 }
+.desc-grid .field { width: 100%; }
 @media (max-width: 760px) { .desc-grid { grid-template-columns: 1fr; } }
 .desc-grid .field label { margin-bottom: 2px; }
 .desc-grid textarea { width: 100%; min-height: 90px; resize: vertical; font-size: 13px; }
@@ -574,7 +574,14 @@ input[type="number"] {
 .lr-unit { color: var(--ink-soft); }
 .lr-value { color: var(--brass); font-weight: 600; }
 
-/* ===================== Editor page ===================== */
+/* Editor page ===================== */
+/* All top-level editor sections share one width so their left AND right edges
+   line up exactly (panels, description, totals block, crafting). */
+.editor-page > .panels,
+.editor-page > .totals-block,
+.editor-page > .desc-grid,
+.editor-page > .editor-header,
+.editor-page > .editor-foot-actions { width: 100%; box-sizing: border-box; margin-left: 0; margin-right: 0; }
 .editor-head-bar { justify-content: flex-start; gap: 14px; }
 .editor-head-bar h2 { flex: 1; }
 .editor-head-actions { display: flex; gap: 8px; }
