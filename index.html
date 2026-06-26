@@ -695,17 +695,18 @@ input[type="number"] {
 .totals-block .totals-strip { flex-wrap: wrap; gap: 14px 22px; }
 .totals-block .totals-strip .t-item { min-width: 120px; }
 
-/* Narrow phones (e.g. S25 FE portrait): stack the bottom section cleanly so
-   nothing is pushed off to one side. The rigid 3-column grid collapses. */
+/* Narrow phones (e.g. S25 FE portrait): stack the whole bottom section in one
+   full-width column so every field lines up with the wide boxes below. */
 @media (max-width: 560px) {
   .sale-fields,
-  .sale-fields-3 { grid-template-columns: 1fr; gap: 12px; }
-  .totals-block .totals-strip { gap: 12px 18px; }
-  .totals-block .totals-strip .t-item { min-width: 0; flex: 1 1 45%; }
+  .sale-fields-3 { grid-template-columns: 1fr; gap: 14px; }
+  /* totals strip: one cell per row, full width, matching the sale fields */
+  .totals-block .totals-strip { display: flex; flex-direction: column; gap: 14px; }
+  .totals-block .totals-strip .t-item { min-width: 0; width: 100%; }
   .totals-block .totals-strip input[type="number"],
   .sale-fields input,
   .sale-fields select { width: 100%; box-sizing: border-box; }
-  .catalogue-strip { grid-template-columns: 1fr; gap: 10px; }
+  .catalogue-strip { grid-template-columns: 1fr; gap: 12px; }
 }
 
 /* Editor header: item name on the left, category + magic toggle on the right */
