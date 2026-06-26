@@ -608,7 +608,8 @@ input[type="number"] {
   gap: 10px 14px; padding-bottom: 14px; margin-bottom: 4px;
   border-bottom: 1px solid var(--rule-light);
 }
-.sale-fields .field { display: flex; flex-direction: column; gap: 3px; }
+.sale-fields .field { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.sale-fields .field input, .sale-fields .field select { width: 100%; box-sizing: border-box; }
 .sale-fields label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--ink-faint); }
 .totals-block .catalogue-strip { background: transparent; border: none; padding: 12px 0 0; margin: 0; }
 
@@ -686,11 +687,26 @@ input[type="number"] {
 .list-cat-toggle.indented { padding-left: 30px; }
 .list-row.indented .lr-name { padding-left: 28px; }
 
-/* Bottom section: 3-up sale fields row (units / sale unit / min qty) */
-.sale-fields-3 { grid-template-columns: repeat(3, 1fr); }
+/* Bottom section: sale fields (units / sale unit / min qty). Use auto-fit so the
+   columns wrap to fewer-per-row when the screen is narrow, instead of forcing
+   three rigid columns that overflow on a phone. */
+.sale-fields-3 { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
 /* Totals strip now also carries item weight as a 4th cell; let it wrap gracefully */
 .totals-block .totals-strip { flex-wrap: wrap; gap: 14px 22px; }
 .totals-block .totals-strip .t-item { min-width: 120px; }
+
+/* Narrow phones (e.g. S25 FE portrait): stack the bottom section cleanly so
+   nothing is pushed off to one side. The rigid 3-column grid collapses. */
+@media (max-width: 560px) {
+  .sale-fields,
+  .sale-fields-3 { grid-template-columns: 1fr; gap: 12px; }
+  .totals-block .totals-strip { gap: 12px 18px; }
+  .totals-block .totals-strip .t-item { min-width: 0; flex: 1 1 45%; }
+  .totals-block .totals-strip input[type="number"],
+  .sale-fields input,
+  .sale-fields select { width: 100%; box-sizing: border-box; }
+  .catalogue-strip { grid-template-columns: 1fr; gap: 10px; }
+}
 
 /* Editor header: item name on the left, category + magic toggle on the right */
 .editor-header { flex-wrap: wrap; align-items: flex-end; }
@@ -1329,8 +1345,10 @@ function renderItemList() {
       const unitName = su ? su.name : '\u2014';
       const mq = it.minSaleQty || 0;
       // catalogueValue already represents the price of a full minimum-sale lot.
-      // Always show "N × unit" so the display reads consistently (e.g. "1 × bundle").
-      const unitLabel = su ? `${(+mq.toFixed(4))} \u00d7 ${escapeHtml(unitName)}` : escapeHtml(unitName);
+      // Show "N unit", using the singular for exactly 1 and the plural otherwise.
+      const qtyNum = +mq.toFixed(4);
+      const unitWord = su ? (qtyNum === 1 ? su.name : (su.namePlural || su.name)) : '';
+      const unitLabel = su ? `${qtyNum} ${escapeHtml(unitWord)}` : escapeHtml(unitName);
       html += `<tr class="list-row${sel}${indented ? ' indented' : ''}" data-item-row="${it.id}">
         <td class="lr-name">${escapeHtml(it.name)}${it.isStub ? ' <span class="stub-tag">incomplete</span>' : ''}</td>
         <td class="lr-unit">${unitLabel}</td>
@@ -1726,23 +1744,25 @@ function renderSaleUnitsScreen(app) {
 
 function editUnitDialog(id) {
   const isNew = id == null;
-  const unit = isNew ? { name: '', type: '' } : getSaleUnit(id);
+  const unit = isNew ? { name: '', namePlural: '', type: '' } : getSaleUnit(id);
   const types = ['weight', 'count', 'measure'];
   const typeOpts = types.map(t => `<option value="${t}" ${(unit.type || '').toLowerCase() === t ? 'selected' : ''}>${t}</option>`).join('');
   const typePlaceholder = `<option value="" ${!unit.type ? 'selected' : ''}>[Select]</option>`;
   openDialog(isNew ? 'Add sale unit' : 'Edit sale unit', `
-    <div class="field"><label>Sale unit name</label><input type="text" id="dlg-name" value="${escapeHtmlAttr(unit.name)}" /></div>
+    <div class="field"><label>Name (singular)</label><input type="text" id="dlg-name" value="${escapeHtmlAttr(unit.name)}" placeholder="e.g. bundle" /></div>
+    <div class="field"><label>Name (plural)</label><input type="text" id="dlg-name-plural" value="${escapeHtmlAttr(unit.namePlural || '')}" placeholder="e.g. bundles" /></div>
     <div class="field"><label>Type</label><select id="dlg-type">${typePlaceholder}${typeOpts}</select></div>
-    <p class="dlg-hint"><strong>weight</strong>: priced by share of the item's weight. <strong>count</strong> / <strong>measure</strong>: priced by share of the base measure quantity.</p>
+    <p class="dlg-hint"><strong>weight</strong>: priced by share of the item's weight. <strong>count</strong> / <strong>measure</strong>: priced by share of the base measure quantity.<br/>The list shows the singular for a quantity of 1 (e.g. "1 bundle") and the plural otherwise (e.g. "4 bundles").</p>
   `, () => {
     const name = document.getElementById('dlg-name').value.trim();
-    if (!name) { alert('Please enter a name.'); return false; }
+    if (!name) { alert('Please enter a singular name.'); return false; }
+    const namePlural = document.getElementById('dlg-name-plural').value.trim() || name;
     const type = document.getElementById('dlg-type').value;
     if (type === '') { alert('Please choose a type.'); return false; }
-    if (isNew) state.saleUnits.push({ id: nextId(state.saleUnits), name, type });
-    else { unit.name = name; unit.type = type; }
+    if (isNew) state.saleUnits.push({ id: nextId(state.saleUnits), name, namePlural, type });
+    else { unit.name = name; unit.namePlural = namePlural; unit.type = type; }
     saveState(); render(); return true;
-  }, { requireSelectors: ['dlg-name', 'dlg-type'] });
+  }, { requireSelectors: ['dlg-name', 'dlg-name-plural', 'dlg-type'] });
 }
 
 function deleteUnit(id) {
@@ -2209,23 +2229,25 @@ function addNewSaleUnitInline() {
   const types = ['weight', 'count', 'measure'];
   const typeOpts = types.map(t => `<option value="${t}">${t}</option>`).join('');
   openDialog('Add sale unit', `
-    <div class="field"><label>Sale unit name</label><input type="text" id="dlg-name" /></div>
+    <div class="field"><label>Name (singular)</label><input type="text" id="dlg-name" placeholder="e.g. bundle" /></div>
+    <div class="field"><label>Name (plural)</label><input type="text" id="dlg-name-plural" placeholder="e.g. bundles" /></div>
     <div class="field"><label>Type</label><select id="dlg-type"><option value="" selected>[Select]</option>${typeOpts}</select></div>
     <p class="dlg-hint"><strong>weight</strong>: priced by share of the item's weight. <strong>count</strong> / <strong>measure</strong>: priced by share of the base measure quantity.</p>
   `, () => {
     const name = document.getElementById('dlg-name').value.trim();
-    if (!name) { alert('Please enter a name.'); return false; }
+    if (!name) { alert('Please enter a singular name.'); return false; }
+    const namePlural = document.getElementById('dlg-name-plural').value.trim() || name;
     const type = document.getElementById('dlg-type').value;
     if (type === '') { alert('Please choose a type.'); return false; }
     const id = nextId(state.saleUnits);
-    state.saleUnits.push({ id, name, type });
+    state.saleUnits.push({ id, name, namePlural, type });
     draftItem.saleUnitId = id;
     saveState();
     refreshSaleUnitSelect();
     updateDraftTotals();
     updateEditorSaveState();
     return true;
-  }, { requireSelectors: ['dlg-name', 'dlg-type'] });
+  }, { requireSelectors: ['dlg-name', 'dlg-name-plural', 'dlg-type'] });
 }
 
 function addNewProfessionInline(selectEl) {
