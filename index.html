@@ -710,6 +710,15 @@ input[type="number"] {
   .editor-header-meta .field:first-child { flex: 1; }
 }
 
+/* Disabled dialog Save button (required field not yet chosen) */
+.btn-disabled, .btn:disabled { opacity: 0.45; cursor: not-allowed; pointer-events: none; }
+
+/* Duplicate Cancel/Save at the bottom of the item editor */
+.editor-foot-actions {
+  display: flex; justify-content: flex-end; gap: 10px;
+  margin-top: 22px; padding-top: 18px; border-top: 1px solid var(--rule);
+}
+
 </style>
 </head>
 <body>
@@ -1186,15 +1195,11 @@ function renderHome(app) {
         ${tile('saleUnits', 'Sale Units', 'Units items are sold by, and how they price', counts.saleUnits + ' units')}
       </div>
       <div class="home-foot">
-        <button class="btn btn-ghost btn-sm" id="homeExportBtn">Export this world\u2026</button>
-        <button class="btn btn-ghost btn-sm" id="homeImportBtn">Import a world\u2026</button>
-        <span class="home-foot-note">Worlds are stored in this browser. Export regularly to keep a backup and to move a world to another device.</span>
+        <span class="home-foot-note">Worlds are stored in this browser. Use <strong>Manage worlds</strong> (top of screen) to export a backup or move a world to another device.</span>
       </div>
     </div>
   `;
   app.querySelectorAll('[data-tile]').forEach(t => t.addEventListener('click', () => navigate(t.dataset.tile)));
-  document.getElementById('homeExportBtn').addEventListener('click', () => exportWorld(library.activeWorldId));
-  document.getElementById('homeImportBtn').addEventListener('click', () => triggerImport('newWorld'));
 }
 
 function tile(screen, title, desc, stat) {
@@ -1446,17 +1451,20 @@ function editProfessionDialog(id) {
   const prof = isNew ? { name: '', skillLevelId: (state.skillLevels[0] || {}).id } : getProfession(id);
   const skillOpts = state.skillLevels.slice().sort((a, b) => a.id - b.id)
     .map(s => `<option value="${s.id}" ${s.id === prof.skillLevelId ? 'selected' : ''}>${escapeHtml(s.name)} (${fmtCurrency2(s.dayRate)}/day)</option>`).join('');
+  const skillPlaceholder = `<option value="" ${prof.skillLevelId == null ? 'selected' : ''}>[Select]</option>`;
   openDialog(isNew ? 'Add profession' : 'Edit profession', `
     <div class="field"><label>Profession name</label><input type="text" id="dlg-name" value="${escapeHtmlAttr(prof.name)}" /></div>
-    <div class="field"><label>Skill level</label><select id="dlg-skill">${skillOpts}</select></div>
+    <div class="field"><label>Skill level</label><select id="dlg-skill">${skillPlaceholder}${skillOpts}</select></div>
   `, () => {
     const name = document.getElementById('dlg-name').value.trim();
     if (!name) { alert('Please enter a name.'); return false; }
-    const skillId = Number(document.getElementById('dlg-skill').value);
+    const skillRaw = document.getElementById('dlg-skill').value;
+    if (skillRaw === '') { alert('Please choose a skill level.'); return false; }
+    const skillId = Number(skillRaw);
     if (isNew) state.professions.push({ id: nextId(state.professions), name, skillLevelId: skillId, description: '' });
     else { prof.name = name; prof.skillLevelId = skillId; }
     saveState(); render(); return true;
-  });
+  }, { requireSelectors: ['dlg-name', 'dlg-skill'] });
 }
 
 function deleteProfession(id) {
@@ -1718,21 +1726,23 @@ function renderSaleUnitsScreen(app) {
 
 function editUnitDialog(id) {
   const isNew = id == null;
-  const unit = isNew ? { name: '', type: 'count' } : getSaleUnit(id);
+  const unit = isNew ? { name: '', type: '' } : getSaleUnit(id);
   const types = ['weight', 'count', 'measure'];
   const typeOpts = types.map(t => `<option value="${t}" ${(unit.type || '').toLowerCase() === t ? 'selected' : ''}>${t}</option>`).join('');
+  const typePlaceholder = `<option value="" ${!unit.type ? 'selected' : ''}>[Select]</option>`;
   openDialog(isNew ? 'Add sale unit' : 'Edit sale unit', `
     <div class="field"><label>Sale unit name</label><input type="text" id="dlg-name" value="${escapeHtmlAttr(unit.name)}" /></div>
-    <div class="field"><label>Type</label><select id="dlg-type">${typeOpts}</select></div>
+    <div class="field"><label>Type</label><select id="dlg-type">${typePlaceholder}${typeOpts}</select></div>
     <p class="dlg-hint"><strong>weight</strong>: priced by share of the item's weight. <strong>count</strong> / <strong>measure</strong>: priced by share of the base measure quantity.</p>
   `, () => {
     const name = document.getElementById('dlg-name').value.trim();
     if (!name) { alert('Please enter a name.'); return false; }
     const type = document.getElementById('dlg-type').value;
+    if (type === '') { alert('Please choose a type.'); return false; }
     if (isNew) state.saleUnits.push({ id: nextId(state.saleUnits), name, type });
     else { unit.name = name; unit.type = type; }
     saveState(); render(); return true;
-  });
+  }, { requireSelectors: ['dlg-name', 'dlg-type'] });
 }
 
 function deleteUnit(id) {
@@ -1873,6 +1883,22 @@ function openDialog(title, bodyHtml, onSave, opts) {
   document.getElementById('dialogCancel').addEventListener('click', closeDialog);
   const saveBtn = document.getElementById('dialogSave');
   if (saveBtn) saveBtn.addEventListener('click', () => { if (dialogOnSave && dialogOnSave() !== false) closeDialog(); });
+  // Optionally keep Save disabled until the listed fields all have a value.
+  if (saveBtn && Array.isArray(opts.requireSelectors) && opts.requireSelectors.length) {
+    const checkRequired = () => {
+      const ok = opts.requireSelectors.every(id => {
+        const el = document.getElementById(id);
+        return el && String(el.value).trim() !== '';
+      });
+      saveBtn.disabled = !ok;
+      saveBtn.classList.toggle('btn-disabled', !ok);
+    };
+    opts.requireSelectors.forEach(id => {
+      const el = document.getElementById(id);
+      if (el) { el.addEventListener('change', checkRequired); el.addEventListener('input', checkRequired); }
+    });
+    checkRequired();
+  }
   const firstInput = overlay.querySelector('input, select, textarea');
   if (firstInput) firstInput.focus();
   overlay.onclick = ev => { if (ev.target === overlay) closeDialog(); };
@@ -1892,13 +1918,11 @@ function closeDialog() {
    the world until Save. Cancel/back discards the draft. */
 
 function openNewItemEditor() {
-  const firstCat = state.categories[0];
-  const firstUnit = state.saleUnits[0];
   draftIsNew = true;
   draftItem = {
     id: nextId(state.items),
-    name: '', categoryId: firstCat ? firstCat.id : null, isMagic: false,
-    weightLbs: 0, minSaleQty: 1, saleUnitId: firstUnit ? firstUnit.id : null,
+    name: '', categoryId: null, isMagic: false,
+    weightLbs: 0, minSaleQty: 1, saleUnitId: null,
     baseMeasureQty: 0, markupAmount: 0, description: '', craftingDescription: '',
     _components: [],
     _professions: [],
@@ -1973,8 +1997,10 @@ function renderEditorPage(app) {
   if (!draftItem) { navigate('catalogue'); return; }
   const item = draftItem;
 
+  const catPlaceholder = `<option value="" ${item.categoryId == null ? 'selected' : ''}>[Select]</option>`;
   const catOptions = state.categories.slice().sort((a, b) => a.name.localeCompare(b.name))
     .map(c => `<option value="${c.id}" ${c.id === item.categoryId ? 'selected' : ''}>${escapeHtml(c.name)}</option>`).join('');
+  const unitPlaceholder = `<option value="" ${item.saleUnitId == null ? 'selected' : ''}>[Select]</option>`;
   const unitOptions = state.saleUnits.slice().sort((a, b) => a.name.localeCompare(b.name))
     .map(u => `<option value="${u.id}" ${u.id === item.saleUnitId ? 'selected' : ''}>${escapeHtml(u.name)}</option>`).join('');
 
@@ -1991,7 +2017,7 @@ function renderEditorPage(app) {
       <div class="editor-header">
         <input id="itemNameInput" class="item-name-input" type="text" placeholder="Item name" value="${escapeHtmlAttr(item.name)}" />
         <div class="editor-header-meta">
-          <div class="field"><label for="f-category">Category</label><select id="f-category"><option value="__add__">+ Add new category\u2026</option>${catOptions}</select></div>
+          <div class="field"><label for="f-category">Category</label><select id="f-category"><option value="__add__">+ Add new category\u2026</option>${catPlaceholder}${catOptions}</select></div>
           <div class="field field-checkbox"><input type="checkbox" id="f-magic" ${item.isMagic ? 'checked' : ''} /><label for="f-magic">Magic item</label></div>
         </div>
       </div>
@@ -2024,7 +2050,7 @@ function renderEditorPage(app) {
         </div>
         <div class="sale-fields sale-fields-3">
           <div class="field"><label for="f-baseqty">Number of units produced</label><input type="number" id="f-baseqty" step="0.01" value="${(Number(item.baseMeasureQty) || 0).toFixed(2)}" /></div>
-          <div class="field"><label for="f-saleunit">Sale unit</label><select id="f-saleunit"><option value="__add__">+ Add new sale unit\u2026</option>${unitOptions}</select></div>
+          <div class="field"><label for="f-saleunit">Sale unit</label><select id="f-saleunit"><option value="__add__">+ Add new sale unit\u2026</option>${unitPlaceholder}${unitOptions}</select></div>
           <div class="field"><label for="f-minqty">Minimum sale quantity</label><input type="number" id="f-minqty" step="0.0001" value="${fmtNum(item.minSaleQty)}" /></div>
         </div>
         <div class="catalogue-strip">
@@ -2036,17 +2062,25 @@ function renderEditorPage(app) {
       <div class="desc-grid desc-bottom">
         <div class="field"><label for="f-craft">Crafting description</label><textarea id="f-craft">${escapeHtml(item.craftingDescription)}</textarea></div>
       </div>
+
+      <div class="editor-foot-actions">
+        <button class="btn" id="editorCancelBtnBottom">Cancel</button>
+        <button class="btn btn-brass" id="editorSaveBtnBottom">Save item</button>
+      </div>
     </div>
   `;
 
   document.getElementById('editorBackBtn').addEventListener('click', cancelEditor);
   document.getElementById('editorCancelBtn').addEventListener('click', cancelEditor);
+  document.getElementById('editorCancelBtnBottom').addEventListener('click', cancelEditor);
+  document.getElementById('editorSaveBtnBottom').addEventListener('click', saveDraft);
   document.getElementById('editorSaveBtn').addEventListener('click', saveDraft);
 
-  document.getElementById('itemNameInput').addEventListener('input', e => { item.name = e.target.value; });
+  document.getElementById('itemNameInput').addEventListener('input', e => { item.name = e.target.value; updateEditorSaveState(); });
   document.getElementById('f-category').addEventListener('change', e => {
     if (e.target.value === '__add__') { e.target.value = item.categoryId != null ? item.categoryId : ''; addNewCategoryInline(); return; }
-    item.categoryId = Number(e.target.value);
+    item.categoryId = e.target.value === '' ? null : Number(e.target.value);
+    updateEditorSaveState();
   });
   document.getElementById('f-magic').addEventListener('change', e => { item.isMagic = e.target.checked; });
   document.getElementById('f-weight').addEventListener('input', e => {
@@ -2062,7 +2096,7 @@ function renderEditorPage(app) {
   });
   document.getElementById('f-saleunit').addEventListener('change', e => {
     if (e.target.value === '__add__') { e.target.value = item.saleUnitId != null ? item.saleUnitId : ''; addNewSaleUnitInline(); return; }
-    item.saleUnitId = Number(e.target.value); updateDraftTotals();
+    item.saleUnitId = e.target.value === '' ? null : Number(e.target.value); updateDraftTotals(); updateEditorSaveState();
   });
   document.getElementById('f-minqty').addEventListener('input', e => { item.minSaleQty = parseFloat(e.target.value) || 0; updateDraftTotals(); });
   document.getElementById('f-baseqty').addEventListener('input', e => { item.baseMeasureQty = Math.round((parseFloat(e.target.value) || 0) * 100) / 100; item._baseQtyUntouched = false; updateDraftTotals(); });
@@ -2081,6 +2115,18 @@ function renderEditorPage(app) {
   if (catSel && item.categoryId != null) catSel.value = String(item.categoryId);
   const unitSel = document.getElementById('f-saleunit');
   if (unitSel && item.saleUnitId != null) unitSel.value = String(item.saleUnitId);
+
+  updateEditorSaveState();
+}
+
+// Disable "Save item" until the required fields (name, category, sale unit) are set.
+function updateEditorSaveState() {
+  if (!draftItem) return;
+  const ok = !!(draftItem.name && draftItem.name.trim()) && draftItem.categoryId != null && draftItem.saleUnitId != null;
+  ['editorSaveBtn', 'editorSaveBtnBottom'].forEach(id => {
+    const btn = document.getElementById(id);
+    if (btn) { btn.disabled = !ok; btn.classList.toggle('btn-disabled', !ok); }
+  });
 }
 
 /* ===================== Inline "add new" from editor dropdowns =====================
@@ -2097,19 +2143,59 @@ function refreshCategorySelect() {
   sel.innerHTML = '<option value="__add__">+ Add new category\u2026</option>' + opts;
 }
 function addNewCategoryInline() {
+  const groups = (state.categoryGroups || []).slice().sort((a, b) => a.name.localeCompare(b.name));
+  const groupOpts = groups.map(g => `<option value="${g.id}">${escapeHtml(g.name)}</option>`).join('');
   openDialog('Add category', `
     <div class="field"><label>Category name</label><input type="text" id="dlg-name" /></div>
+    <div class="field"><label>Group</label>
+      <select id="dlg-group">
+        <option value="__add__">+ Add new group\u2026</option>
+        <option value="" selected>[Select]</option>
+        <option value="__none__">\u2014 No group \u2014</option>
+        ${groupOpts}
+      </select>
+    </div>
     <div class="field"><label>Description (optional)</label><textarea id="dlg-desc"></textarea></div>
   `, () => {
     const name = document.getElementById('dlg-name').value.trim();
     if (!name) { alert('Please enter a name.'); return false; }
+    const groupVal = document.getElementById('dlg-group').value;
+    if (groupVal === '' || groupVal === '__add__') { alert('Please choose a group (or "No group").'); return false; }
     const id = nextId(state.categories);
-    state.categories.push({ id, name, description: document.getElementById('dlg-desc').value });
+    state.categories.push({
+      id, name,
+      groupId: groupVal === '__none__' ? null : Number(groupVal),
+      description: document.getElementById('dlg-desc').value
+    });
     draftItem.categoryId = id;
     saveState();
     refreshCategorySelect();
+    updateEditorSaveState();
     return true;
-  });
+  }, { requireSelectors: ['dlg-name', 'dlg-group'] });
+  // wire the "+ Add new group" option: create a group inline, then preselect it
+  const gsel = document.getElementById('dlg-group');
+  if (gsel) {
+    gsel.addEventListener('change', e => {
+      if (e.target.value === '__add__') {
+        const gname = prompt('New group name:');
+        if (gname && gname.trim()) {
+          if (!Array.isArray(state.categoryGroups)) state.categoryGroups = [];
+          const gid = nextId(state.categoryGroups);
+          state.categoryGroups.push({ id: gid, name: gname.trim() });
+          saveState();
+          const opt = document.createElement('option');
+          opt.value = String(gid); opt.textContent = gname.trim();
+          e.target.appendChild(opt);
+          e.target.value = String(gid);
+          e.target.dispatchEvent(new Event('change'));
+        } else {
+          e.target.value = '';
+          e.target.dispatchEvent(new Event('change'));
+        }
+      }
+    });
+  }
 }
 
 function refreshSaleUnitSelect() {
@@ -2124,19 +2210,22 @@ function addNewSaleUnitInline() {
   const typeOpts = types.map(t => `<option value="${t}">${t}</option>`).join('');
   openDialog('Add sale unit', `
     <div class="field"><label>Sale unit name</label><input type="text" id="dlg-name" /></div>
-    <div class="field"><label>Type</label><select id="dlg-type">${typeOpts}</select></div>
+    <div class="field"><label>Type</label><select id="dlg-type"><option value="" selected>[Select]</option>${typeOpts}</select></div>
     <p class="dlg-hint"><strong>weight</strong>: priced by share of the item's weight. <strong>count</strong> / <strong>measure</strong>: priced by share of the base measure quantity.</p>
   `, () => {
     const name = document.getElementById('dlg-name').value.trim();
     if (!name) { alert('Please enter a name.'); return false; }
+    const type = document.getElementById('dlg-type').value;
+    if (type === '') { alert('Please choose a type.'); return false; }
     const id = nextId(state.saleUnits);
-    state.saleUnits.push({ id, name, type: document.getElementById('dlg-type').value });
+    state.saleUnits.push({ id, name, type });
     draftItem.saleUnitId = id;
     saveState();
     refreshSaleUnitSelect();
     updateDraftTotals();
+    updateEditorSaveState();
     return true;
-  });
+  }, { requireSelectors: ['dlg-name', 'dlg-type'] });
 }
 
 function addNewProfessionInline(selectEl) {
@@ -2144,12 +2233,12 @@ function addNewProfessionInline(selectEl) {
     .map(s => `<option value="${s.id}">${escapeHtml(s.name)} (${fmtCurrency2(s.dayRate)}/day)</option>`).join('');
   openDialog('Add profession', `
     <div class="field"><label>Profession name</label><input type="text" id="dlg-name" /></div>
-    <div class="field"><label>Skill level</label><select id="dlg-skill">${skillOpts}</select></div>
+    <div class="field"><label>Skill level</label><select id="dlg-skill"><option value="" selected>[Select]</option>${skillOpts}</select></div>
   `, () => {
     const name = document.getElementById('dlg-name').value.trim();
     if (!name) { alert('Please enter a name.'); return false; }
     const skillVal = document.getElementById('dlg-skill').value;
-    if (skillVal === '__addskill__') { alert('Please choose a skill level (or add one first from the Skill Levels screen).'); return false; }
+    if (skillVal === '' || skillVal === '__addskill__') { alert('Please choose a skill level.'); return false; }
     const id = nextId(state.professions);
     state.professions.push({ id, name, skillLevelId: Number(skillVal), description: '' });
     saveState();
@@ -2292,7 +2381,7 @@ function openAddComponentDialog() {
   const others = state.items.filter(i => i.id !== draftItem.id).slice().sort((a, b) => a.name.localeCompare(b.name));
   const options = others.map(i => `<option value="${i.id}">${escapeHtml(i.name)}${i.isStub ? ' \u00b7 incomplete' : ''}</option>`).join('');
   openDialog('Add component', `
-    <div class="field"><label>Component</label><select id="newCompSelect"><option value="__add__">+ Quick-add new item\u2026</option>${options}</select></div>
+    <div class="field"><label>Component</label><select id="newCompSelect"><option value="__add__">+ Quick-add new item\u2026</option><option value="" selected>[Select]</option>${options}</select></div>
     <div class="field"><label>Quantity</label><input type="number" id="newCompQty" step="0.0001" value="1.0000" /></div>
     <div class="add-row-error" id="newCompError" style="display:none;"></div>
   `, () => {
@@ -2314,13 +2403,12 @@ function openAddComponentDialog() {
     renderDraftComponentsGrid();
     updateDraftTotals();
     return true;
-  });
+  }, { requireSelectors: ['newCompSelect'] });
   // wire quick-add option and sensible default selection
   const sel = document.getElementById('newCompSelect');
   if (sel) {
-    if (others.length) sel.value = String(others[0].id);
     sel.addEventListener('change', e => {
-      if (e.target.value === '__add__') { e.target.value = others.length ? String(others[0].id) : ''; closeDialog(); quickAddComponentItemInline(); }
+      if (e.target.value === '__add__') { e.target.value = ''; closeDialog(); quickAddComponentItemInline(); }
     });
   }
 }
@@ -2413,7 +2501,7 @@ function openAddLabourDialog() {
   const profs = state.professions.slice().sort((a, b) => a.name.localeCompare(b.name));
   const options = profs.map(p => `<option value="${p.id}">${escapeHtml(p.name)}</option>`).join('');
   openDialog('Add labour', `
-    <div class="field"><label>Profession</label><select id="newProfSelect"><option value="__add__">+ Add new profession\u2026</option>${options}</select></div>
+    <div class="field"><label>Profession</label><select id="newProfSelect"><option value="__add__">+ Add new profession\u2026</option><option value="" selected>[Select]</option>${options}</select></div>
     <div class="field"><label>Number of workers</label><input type="number" id="newProfWorkers" step="1" value="1" /></div>
     <div class="field"><label>Crafting days</label><input type="number" id="newProfDays" step="0.0001" value="1.0000" /></div>
   `, () => {
@@ -2426,12 +2514,11 @@ function openAddLabourDialog() {
     renderDraftProfessionsGrid();
     updateDraftTotals();
     return true;
-  });
+  }, { requireSelectors: ['newProfSelect'] });
   const sel = document.getElementById('newProfSelect');
   if (sel) {
-    if (profs.length) sel.value = String(profs[0].id);
     sel.addEventListener('change', e => {
-      if (e.target.value === '__add__') { e.target.value = profs.length ? String(profs[0].id) : ''; closeDialog(); addNewProfessionInline(); }
+      if (e.target.value === '__add__') { e.target.value = ''; closeDialog(); addNewProfessionInline(); }
     });
   }
 }
