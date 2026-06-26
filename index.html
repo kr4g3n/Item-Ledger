@@ -273,12 +273,12 @@ input[type="number"] {
 
 .panels {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 16px;
   margin-bottom: 18px;
 }
 @media (max-width: 760px) {
-  .panels { grid-template-columns: 1fr; }
+  .panels { grid-template-columns: minmax(0, 1fr); }
 }
 
 .panel {
@@ -286,7 +286,13 @@ input[type="number"] {
   border: 1px solid var(--rule-light);
   border-radius: var(--radius);
   padding: 12px 14px;
+  min-width: 0;            /* allow the panel to shrink to its grid track */
+  overflow: hidden;        /* keep the card edge tidy */
 }
+/* The component/labour tables can be wider than a phone; let them scroll
+   horizontally inside the panel instead of stretching the whole card. */
+#componentsGridWrap, #professionsGridWrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.grid-table { min-width: 0; }
 
 .panel-title {
   font-family: var(--font-display);
@@ -749,7 +755,7 @@ input[type="number"] {
 <header class="topbar">
   <div>
     <h1><span class="mark">⚖</span> The Item Ledger</h1>
-    <div class="sub">Works fully offline &middot; your data stays on this device</div>
+    <div class="sub">Works fully offline &middot; your data stays on this device &middot; <span style="opacity:0.45">v15</span></div>
   </div>
 </header>
 <div class="world-bar" id="worldBar"></div>
