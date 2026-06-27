@@ -749,13 +749,17 @@ input[type="number"] {
   margin-top: 22px; padding-top: 18px; border-top: 1px solid var(--rule);
 }
 
+/* Component grid total-weight footer row */
+.grid-table tfoot .grid-foot td { border-top: 1px solid var(--rule); padding-top: 6px; color: var(--ink-soft); font-size: 12px; }
+.grid-table tfoot .grid-foot td#compTotalWeight { color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
+
 </style>
 </head>
 <body>
 <header class="topbar">
   <div>
     <h1><span class="mark">⚖</span> The Item Ledger</h1>
-    <div class="sub">Works fully offline &middot; your data stays on this device &middot; <span style="opacity:0.45">v15</span></div>
+    <div class="sub">Works fully offline &middot; your data stays on this device &middot; <span style="opacity:0.45">v16</span></div>
   </div>
 </header>
 <div class="world-bar" id="worldBar"></div>
@@ -1265,6 +1269,7 @@ function renderCatalogue(app) {
         <div class="list-toolbar-actions">
           <button class="btn btn-brass" id="addItemBtn">+ Add item</button>
           <button class="btn" id="editItemBtn" disabled>Edit</button>
+          <button class="btn" id="duplicateItemBtn" disabled>Duplicate</button>
           <button class="btn btn-wax" id="deleteItemBtn" disabled>Delete</button>
         </div>
       </div>
@@ -1275,6 +1280,7 @@ function renderCatalogue(app) {
   document.getElementById('searchInput').addEventListener('input', renderItemList);
   document.getElementById('addItemBtn').addEventListener('click', openNewItemEditor);
   document.getElementById('editItemBtn').addEventListener('click', () => { if (selectedItemId != null) openEditItemEditor(selectedItemId); });
+  document.getElementById('duplicateItemBtn').addEventListener('click', () => { if (selectedItemId != null) duplicateItemFromList(selectedItemId); });
   document.getElementById('deleteItemBtn').addEventListener('click', () => { if (selectedItemId != null) deleteItemFromList(selectedItemId); });
   renderItemList();
 }
@@ -1282,8 +1288,10 @@ function renderCatalogue(app) {
 function updateListToolbarButtons() {
   const has = selectedItemId != null && !!getItem(selectedItemId);
   const edit = document.getElementById('editItemBtn');
+  const dup = document.getElementById('duplicateItemBtn');
   const del = document.getElementById('deleteItemBtn');
   if (edit) edit.disabled = !has;
+  if (dup) dup.disabled = !has;
   if (del) del.disabled = !has;
 }
 
@@ -1439,6 +1447,29 @@ function deleteItemFromList(id) {
   invalidateAll();
   saveState();
   renderItemList();
+}
+
+function duplicateItemFromList(id) {
+  const item = getItem(id);
+  if (!item) return;
+  const newId = nextId(state.items);
+  // copy the item record with a new id and a distinct name
+  const copy = { ...item, id: newId, name: `${item.name} (copy)` };
+  delete copy.isStub;
+  state.items.push(copy);
+  // copy its component links (this item as parent) to the new id
+  componentsOf(item.id).forEach(c => {
+    state.components.push({ ...c, parentItemId: newId });
+  });
+  // copy its labour links to the new id
+  professionsOf(item.id).forEach(ip => {
+    state.itemProfessions.push({ ...ip, itemId: newId });
+  });
+  selectedItemId = newId;
+  invalidateAll();
+  saveState();
+  // open the copy straight away for editing
+  openEditItemEditor(newId);
 }
 
 /* ===================== Generic helpers ===================== */
@@ -2010,11 +2041,13 @@ function computeDraftResult() {
   invalidateParentIndex();
   const memo = rebuildCalcCache();
   const result = memo.get(d.id) || { materialsTotal: 0, labourTotal: 0, totalCost: 0, itemValue: 0, catalogueValue: 0, catalogueWeight: 0 };
-  // capture component unit values for the grid (from the same memo)
+  // capture component unit values + weights for the grid (from the same memo)
   const compUnitValues = new Map();
+  const compUnitWeights = new Map();
   for (const c of d._components) {
     const r = memo.get(c.componentItemId);
     compUnitValues.set(c.componentItemId, r ? r.catalogueValue : 0);
+    compUnitWeights.set(c.componentItemId, r ? r.catalogueWeight : 0);
   }
 
   // restore
@@ -2024,7 +2057,7 @@ function computeDraftResult() {
   invalidateParentIndex();
   rebuildCalcCache();
 
-  return { result, compUnitValues };
+  return { result, compUnitValues, compUnitWeights };
 }
 
 function renderEditorPage(app) {
@@ -2365,34 +2398,52 @@ function renderDraftComponentsGrid() {
   if (!wrap) return;
   const rows = draftItem._components;
   if (rows.length === 0) { wrap.innerHTML = '<p style="color:var(--ink-faint);font-size:13px;margin:4px 0;">No components yet.</p>'; return; }
-  const { compUnitValues } = computeDraftResult();
+  const { compUnitValues, compUnitWeights } = computeDraftResult();
+  let totalWeight = 0;
   let html = `<table class="grid-table"><thead><tr>
-      <th>Component</th><th class="num">Unit value</th><th class="num">Qty</th><th class="num">Cost</th><th></th>
+      <th>Component</th><th class="num">Unit value</th><th class="num">Qty</th><th class="num">Cost</th><th class="num">Weight</th><th></th>
     </tr></thead><tbody>`;
   rows.forEach((c, idx) => {
     const compItem = getItem(c.componentItemId);
     const unitVal = compUnitValues.get(c.componentItemId) || 0;
+    const unitWt = compUnitWeights.get(c.componentItemId) || 0;
     const lineCost = (c.quantity || 0) * unitVal;
+    const lineWt = (c.quantity || 0) * unitWt;
+    totalWeight += lineWt;
     html += `<tr>
       <td class="row-name">${escapeHtml(compItem ? compItem.name : 'Unknown item')}</td>
       <td class="num">${fmtCurrency(unitVal)}</td>
       <td class="num"><input type="number" step="0.0001" value="${fmtNum(c.quantity)}" data-draft-comp-qty="${idx}" /></td>
       <td class="num line-cost">${fmtCurrency(lineCost)}</td>
+      <td class="num line-weight">${fmtNum(lineWt)}</td>
       <td><button class="row-del" data-draft-comp-del="${idx}" title="Remove">\u00d7</button></td>
     </tr>`;
   });
-  html += '</tbody></table>';
+  html += `</tbody><tfoot><tr class="grid-foot">
+      <td colspan="4" class="num">Total component weight (lbs)</td>
+      <td class="num" id="compTotalWeight">${fmtNum(totalWeight)}</td>
+      <td></td>
+    </tr></tfoot>`;
+  html += '</table>';
   wrap.innerHTML = html;
   wrap.querySelectorAll('[data-draft-comp-qty]').forEach(inp => {
     inp.addEventListener('input', e => {
       const idx = Number(e.target.dataset.draftCompQty);
       draftItem._components[idx].quantity = parseFloat(e.target.value) || 0;
       updateDraftTotals();
-      // update just this row's line cost without full re-render (keep focus)
-      const { compUnitValues } = computeDraftResult();
+      // update this row's line cost + weight, and the weight total, without full re-render (keep focus)
+      const { compUnitValues, compUnitWeights } = computeDraftResult();
       const c = draftItem._components[idx];
-      const cell = e.target.closest('tr').querySelector('.line-cost');
-      if (cell) cell.textContent = fmtCurrency((c.quantity || 0) * (compUnitValues.get(c.componentItemId) || 0));
+      const tr = e.target.closest('tr');
+      const costCell = tr.querySelector('.line-cost');
+      const wtCell = tr.querySelector('.line-weight');
+      if (costCell) costCell.textContent = fmtCurrency((c.quantity || 0) * (compUnitValues.get(c.componentItemId) || 0));
+      if (wtCell) wtCell.textContent = fmtNum((c.quantity || 0) * (compUnitWeights.get(c.componentItemId) || 0));
+      // recompute total weight across all rows
+      let tot = 0;
+      draftItem._components.forEach(cc => { tot += (cc.quantity || 0) * (compUnitWeights.get(cc.componentItemId) || 0); });
+      const totCell = document.getElementById('compTotalWeight');
+      if (totCell) totCell.textContent = fmtNum(tot);
     });
   });
   wrap.querySelectorAll('[data-draft-comp-del]').forEach(btn => {
