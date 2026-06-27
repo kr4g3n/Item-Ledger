@@ -753,13 +753,30 @@ input[type="number"] {
 .grid-table tfoot .grid-foot td { border-top: 1px solid var(--rule); padding-top: 6px; color: var(--ink-soft); font-size: 12px; }
 .grid-table tfoot .grid-foot td#compTotalWeight { color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
 
+/* Searchable combo picker (component / profession selection at scale) */
+.combo-search { width: 100%; box-sizing: border-box; }
+.combo-list {
+  margin-top: 6px; max-height: 260px; overflow-y: auto;
+  border: 1px solid var(--rule); border-radius: 6px; background: var(--panel);
+}
+.combo-item {
+  padding: 9px 11px; font-size: 14px; cursor: pointer;
+  border-bottom: 1px solid var(--rule-light);
+}
+.combo-item:last-child { border-bottom: none; }
+.combo-item:hover, .combo-item:active { background: var(--brass-faint, rgba(168,127,31,0.12)); }
+.combo-add { color: var(--moss, #4a5a37); font-weight: 600; }
+.combo-empty, .combo-more { padding: 9px 11px; font-size: 12px; color: var(--ink-faint); }
+.combo-more { border-top: 1px solid var(--rule-light); }
+.combo-chosen { margin-top: 6px; font-size: 13px; color: var(--ink-soft); font-weight: 600; }
+
 </style>
 </head>
 <body>
 <header class="topbar">
   <div>
     <h1><span class="mark">⚖</span> The Item Ledger</h1>
-    <div class="sub">Works fully offline &middot; your data stays on this device &middot; <span style="opacity:0.45">v16</span></div>
+    <div class="sub">Works fully offline &middot; your data stays on this device &middot; <span style="opacity:0.45">v17</span></div>
   </div>
 </header>
 <div class="world-bar" id="worldBar"></div>
@@ -2466,15 +2483,19 @@ function renderDraftAddComponentRow() {
 
 function openAddComponentDialog() {
   const others = state.items.filter(i => i.id !== draftItem.id).slice().sort((a, b) => a.name.localeCompare(b.name));
-  const options = others.map(i => `<option value="${i.id}">${escapeHtml(i.name)}${i.isStub ? ' \u00b7 incomplete' : ''}</option>`).join('');
   openDialog('Add component', `
-    <div class="field"><label>Component</label><select id="newCompSelect"><option value="__add__">+ Quick-add new item\u2026</option><option value="" selected>[Select]</option>${options}</select></div>
+    <div class="field">
+      <label>Component</label>
+      <input type="text" id="compSearch" class="combo-search" placeholder="Type to search items\u2026" autocomplete="off" />
+      <input type="hidden" id="newCompSelect" value="" />
+      <div class="combo-list" id="compList"></div>
+      <div class="combo-chosen" id="compChosen" style="display:none;"></div>
+    </div>
     <div class="field"><label>Quantity</label><input type="number" id="newCompQty" step="0.0001" value="1.0000" /></div>
     <div class="add-row-error" id="newCompError" style="display:none;"></div>
   `, () => {
-    const sel = document.getElementById('newCompSelect');
-    const val = sel.value;
-    if (val === '__add__' || val === '') { alert('Please choose a component.'); return false; }
+    const val = document.getElementById('newCompSelect').value;
+    if (val === '' ) { alert('Please choose a component.'); return false; }
     const compId = Number(val);
     const qty = parseFloat(document.getElementById('newCompQty').value) || 0;
     const errEl = document.getElementById('newCompError');
@@ -2491,13 +2512,72 @@ function openAddComponentDialog() {
     updateDraftTotals();
     return true;
   }, { requireSelectors: ['newCompSelect'] });
-  // wire quick-add option and sensible default selection
-  const sel = document.getElementById('newCompSelect');
-  if (sel) {
-    sel.addEventListener('change', e => {
-      if (e.target.value === '__add__') { e.target.value = ''; closeDialog(); quickAddComponentItemInline(); }
+
+  setupComboPicker({
+    items: others,
+    searchId: 'compSearch',
+    listId: 'compList',
+    hiddenId: 'newCompSelect',
+    chosenId: 'compChosen',
+    quickAddLabel: '+ Quick-add new item\u2026',
+    onQuickAdd: () => { closeDialog(); quickAddComponentItemInline(); }
+  });
+}
+
+/* Reusable searchable picker: a text box that live-filters a list of items
+   shown beneath it; tap a result to select. Scales to very large item counts
+   by matching anywhere in the name and capping the visible results. */
+function setupComboPicker(opts) {
+  const search = document.getElementById(opts.searchId);
+  const list = document.getElementById(opts.listId);
+  const hidden = document.getElementById(opts.hiddenId);
+  const chosen = opts.chosenId ? document.getElementById(opts.chosenId) : null;
+  if (!search || !list || !hidden) return;
+  const CAP = 50;
+  const labelOf = opts.labelOf || (i => i.name + (i.isStub ? ' \u00b7 incomplete' : ''));
+
+  function fireChange() { hidden.dispatchEvent(new Event('change')); }
+
+  function render(filter) {
+    const q = (filter || '').trim().toLowerCase();
+    let matches = q === '' ? opts.items : opts.items.filter(i => i.name.toLowerCase().includes(q));
+    const total = matches.length;
+    matches = matches.slice(0, CAP);
+    let html = '';
+    if (opts.quickAddLabel) {
+      html += `<div class="combo-item combo-add" data-combo-add="1">${escapeHtml(opts.quickAddLabel)}</div>`;
+    }
+    if (matches.length === 0) {
+      html += `<div class="combo-empty">No matches${q ? ` for \u201c${escapeHtml(q)}\u201d` : ''}.</div>`;
+    } else {
+      html += matches.map(i => `<div class="combo-item" data-combo-id="${i.id}">${escapeHtml(labelOf(i))}</div>`).join('');
+      if (total > CAP) html += `<div class="combo-more">Showing first ${CAP} of ${total}. Keep typing to narrow\u2026</div>`;
+    }
+    list.innerHTML = html;
+    list.querySelectorAll('[data-combo-id]').forEach(el => {
+      el.addEventListener('click', () => {
+        const id = el.dataset.comboId;
+        hidden.value = id;
+        const it = opts.items.find(x => String(x.id) === String(id));
+        if (chosen) { chosen.style.display = 'block'; chosen.textContent = 'Selected: ' + (it ? it.name : id); }
+        search.value = it ? it.name : '';
+        list.style.display = 'none';
+        fireChange();
+      });
     });
+    const addEl = list.querySelector('[data-combo-add]');
+    if (addEl && opts.onQuickAdd) addEl.addEventListener('click', opts.onQuickAdd);
   }
+
+  search.addEventListener('input', () => {
+    hidden.value = '';                 // typing clears any prior selection
+    if (chosen) chosen.style.display = 'none';
+    list.style.display = 'block';
+    fireChange();
+    render(search.value);
+  });
+  search.addEventListener('focus', () => { list.style.display = 'block'; render(search.value); });
+  render('');
 }
 
 /* Cycle check against saved graph + the draft's current component set */
@@ -2586,14 +2666,19 @@ function renderDraftAddProfessionRow() {
 
 function openAddLabourDialog() {
   const profs = state.professions.slice().sort((a, b) => a.name.localeCompare(b.name));
-  const options = profs.map(p => `<option value="${p.id}">${escapeHtml(p.name)}</option>`).join('');
   openDialog('Add labour', `
-    <div class="field"><label>Profession</label><select id="newProfSelect"><option value="__add__">+ Add new profession\u2026</option><option value="" selected>[Select]</option>${options}</select></div>
+    <div class="field">
+      <label>Profession</label>
+      <input type="text" id="profSearch" class="combo-search" placeholder="Type to search professions\u2026" autocomplete="off" />
+      <input type="hidden" id="newProfSelect" value="" />
+      <div class="combo-list" id="profList"></div>
+      <div class="combo-chosen" id="profChosen" style="display:none;"></div>
+    </div>
     <div class="field"><label>Number of workers</label><input type="number" id="newProfWorkers" step="1" value="1" /></div>
     <div class="field"><label>Crafting days</label><input type="number" id="newProfDays" step="0.0001" value="1.0000" /></div>
   `, () => {
     const val = document.getElementById('newProfSelect').value;
-    if (val === '__add__' || val === '') { alert('Please choose a profession.'); return false; }
+    if (val === '') { alert('Please choose a profession.'); return false; }
     const profId = Number(val);
     const workers = parseFloat(document.getElementById('newProfWorkers').value) || 0;
     const days = parseFloat(document.getElementById('newProfDays').value) || 0;
@@ -2602,12 +2687,16 @@ function openAddLabourDialog() {
     updateDraftTotals();
     return true;
   }, { requireSelectors: ['newProfSelect'] });
-  const sel = document.getElementById('newProfSelect');
-  if (sel) {
-    sel.addEventListener('change', e => {
-      if (e.target.value === '__add__') { e.target.value = ''; closeDialog(); addNewProfessionInline(); }
-    });
-  }
+
+  setupComboPicker({
+    items: profs,
+    searchId: 'profSearch',
+    listId: 'profList',
+    hiddenId: 'newProfSelect',
+    chosenId: 'profChosen',
+    quickAddLabel: '+ Add new profession\u2026',
+    onQuickAdd: () => { closeDialog(); addNewProfessionInline(); }
+  });
 }
 
 function updateDraftTotals() {
