@@ -770,13 +770,19 @@ input[type="number"] {
 .combo-more { border-top: 1px solid var(--rule-light); }
 .combo-chosen { margin-top: 6px; font-size: 13px; color: var(--ink-soft); font-weight: 600; }
 
+/* Add-component dialog: quantity with its unit beside it, plus weight preview */
+.qty-unit-row { display: flex; align-items: center; gap: 10px; }
+.qty-unit-row input[type="number"] { flex: 1 1 auto; min-width: 0; }
+.qty-unit { flex: 0 0 auto; font-size: 14px; color: var(--ink-soft); min-width: 60px; }
+.qty-weight-note { margin-top: 6px; font-size: 13px; color: var(--ink-soft); font-variant-numeric: tabular-nums; }
+
 </style>
 </head>
 <body>
 <header class="topbar">
   <div>
     <h1><span class="mark">⚖</span> The Item Ledger</h1>
-    <div class="sub">Works fully offline &middot; your data stays on this device &middot; <span style="opacity:0.45">v17</span></div>
+    <div class="sub">Works fully offline &middot; your data stays on this device &middot; <span style="opacity:0.45">v18</span></div>
   </div>
 </header>
 <div class="world-bar" id="worldBar"></div>
@@ -2491,7 +2497,14 @@ function openAddComponentDialog() {
       <div class="combo-list" id="compList"></div>
       <div class="combo-chosen" id="compChosen" style="display:none;"></div>
     </div>
-    <div class="field"><label>Quantity</label><input type="number" id="newCompQty" step="0.0001" value="1.0000" /></div>
+    <div class="field">
+      <label>Quantity</label>
+      <div class="qty-unit-row">
+        <input type="number" id="newCompQty" step="0.0001" value="1.0000" />
+        <span class="qty-unit" id="newCompUnit">\u2014</span>
+      </div>
+    </div>
+    <div class="qty-weight-note" id="newCompWeight" style="display:none;"></div>
     <div class="add-row-error" id="newCompError" style="display:none;"></div>
   `, () => {
     const val = document.getElementById('newCompSelect').value;
@@ -2522,6 +2535,42 @@ function openAddComponentDialog() {
     quickAddLabel: '+ Quick-add new item\u2026',
     onQuickAdd: () => { closeDialog(); quickAddComponentItemInline(); }
   });
+
+  // Live preview of the selected component's sale unit + the weight of the
+  // quantity being added (display only; the main form is unaffected).
+  function refreshCompPreview() {
+    const hidden = document.getElementById('newCompSelect');
+    const unitEl = document.getElementById('newCompUnit');
+    const wtEl = document.getElementById('newCompWeight');
+    const qtyEl = document.getElementById('newCompQty');
+    if (!hidden || !unitEl || !wtEl || !qtyEl) return;
+    const id = hidden.value;
+    if (id === '') { unitEl.textContent = '\u2014'; wtEl.style.display = 'none'; return; }
+    const compId = Number(id);
+    const qty = parseFloat(qtyEl.value) || 0;
+    const su = getSaleUnit((getItem(compId) || {}).saleUnitId);
+    const unitWord = su ? (qty === 1 ? su.name : (su.namePlural || su.name)) : '';
+    unitEl.textContent = unitWord || '\u2014';
+    // weight = qty x component's catalogue weight (same basis as the grid)
+    const { compUnitWeights } = computeDraftResultFor(compId);
+    const unitWt = compUnitWeights.get(compId) || 0;
+    wtEl.style.display = 'block';
+    wtEl.textContent = `Weight of this amount: ${fmtNum(qty * unitWt)} lbs`;
+  }
+  document.getElementById('newCompSelect').addEventListener('change', refreshCompPreview);
+  document.getElementById('newCompQty').addEventListener('input', refreshCompPreview);
+}
+
+/* Compute a single item's catalogue weight (and value) using the saved graph,
+   for previewing a component before it's added to the draft. */
+function computeDraftResultFor(itemId) {
+  const memo = calcAll();
+  const r = memo.get(itemId);
+  const compUnitWeights = new Map();
+  const compUnitValues = new Map();
+  compUnitWeights.set(itemId, r ? r.catalogueWeight : 0);
+  compUnitValues.set(itemId, r ? r.catalogueValue : 0);
+  return { compUnitWeights, compUnitValues };
 }
 
 /* Reusable searchable picker: a text box that live-filters a list of items
