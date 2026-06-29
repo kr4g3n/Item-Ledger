@@ -782,7 +782,7 @@ input[type="number"] {
 <header class="topbar">
   <div>
     <h1><span class="mark">⚖</span> The Item Ledger</h1>
-    <div class="sub">Works fully offline &middot; your data stays on this device &middot; <span style="opacity:0.45">v18</span></div>
+    <div class="sub">Works fully offline &middot; your data stays on this device &middot; <span style="opacity:0.45">v20</span></div>
   </div>
 </header>
 <div class="world-bar" id="worldBar"></div>
@@ -1039,7 +1039,7 @@ function computeItem(itemId, cache, visiting) {
   }
 
   const totalCost = materialsTotal + labourTotal;
-  const itemValue = round4(totalCost + (item.markupAmount || 0));
+  const itemValue = round5(totalCost + (item.markupAmount || 0));
 
   const su = getSaleUnit(item.saleUnitId);
   const unitType = su ? (su.type || '').toLowerCase() : '';
@@ -1057,9 +1057,9 @@ function computeItem(itemId, cache, visiting) {
   }
   // Round to 4dp so the displayed per-unit value is exactly what gets used
   // when this item is a component elsewhere (values always reconcile by hand).
-  catalogueValue = round4(catalogueValue);
+  catalogueValue = round5(catalogueValue);
 
-  const result = { materialsTotal: round4(materialsTotal), labourTotal: round4(labourTotal), totalCost: round4(totalCost), itemValue, catalogueValue, catalogueWeight, circular: anyCircular };
+  const result = { materialsTotal: round5(materialsTotal), labourTotal: round5(labourTotal), totalCost: round5(totalCost), itemValue, catalogueValue, catalogueWeight, circular: anyCircular };
   visiting.delete(itemId);
   cache.set(itemId, result);
   return result;
@@ -1139,21 +1139,24 @@ function wouldCreateCycle(parentId, candidateComponentId) {
 }
 
 /* ===================== Formatting ===================== */
-function round4(v) {
-  // Round to 4 decimal places, guarding against binary-float artefacts.
-  return Math.round((Number(v) + Number.EPSILON) * 10000) / 10000;
+function round5(v) {
+  // Round to 5 decimal places, guarding against binary-float artefacts.
+  // This matches the editor's 5dp display so the value shown is the value used.
+  return Math.round((Number(v) + Number.EPSILON) * 100000) / 100000;
 }
+// Backward-compatible alias in case anything still references the old name.
+var round4 = round5;
 function fmtCurrency(v) {
   const n = Number(v) || 0;
   const sign = n < 0 ? '-' : '';
-  return sign + '\u20B2' + Math.abs(n).toFixed(4);
+  return sign + '\u20B2' + Math.abs(n).toFixed(5);
 }
 function fmtCurrency2(v) {
   const n = Number(v) || 0;
   const sign = n < 0 ? '-' : '';
   return sign + '\u20B2' + Math.abs(n).toFixed(2);
 }
-function fmtNum(v) { return (Number(v) || 0).toFixed(4); }
+function fmtNum(v) { return (Number(v) || 0).toFixed(5); }
 function flashEl(el) { el.classList.remove('flash'); void el.offsetWidth; el.classList.add('flash'); }
 
 </script>
@@ -1603,7 +1606,7 @@ function editSkillDialog(id) {
   const sk = isNew ? { name: '', dayRate: 0 } : getSkillLevel(id);
   openDialog(isNew ? 'Add skill level' : 'Edit skill level', `
     <div class="field"><label>Skill level name</label><input type="text" id="dlg-name" value="${escapeHtmlAttr(sk.name)}" /></div>
-    <div class="field"><label>Day rate (\u20B2)</label><input type="number" step="0.0001" id="dlg-rate" value="${fmtNum(sk.dayRate)}" /></div>
+    <div class="field"><label>Day rate (\u20B2)</label><input type="number" step="0.00001" id="dlg-rate" value="${fmtNum(sk.dayRate)}" /></div>
   `, () => {
     const name = document.getElementById('dlg-name').value.trim();
     if (!name) { alert('Please enter a name.'); return false; }
@@ -2134,14 +2137,14 @@ function renderEditorPage(app) {
       <div class="totals-block">
         <div class="totals-strip">
           <div class="t-item"><span class="t-label">Total cost</span><span class="t-val" id="totalCostVal"></span></div>
-          <div class="t-item"><span class="t-label">Markup</span><input type="number" id="f-markup" step="0.0001" value="${fmtNum(item.markupAmount)}" /></div>
+          <div class="t-item"><span class="t-label">Markup</span><input type="number" id="f-markup" step="0.00001" value="${fmtNum(item.markupAmount)}" /></div>
           <div class="t-item t-final"><span class="t-label">Item value</span><span class="t-val" id="itemValueVal"></span></div>
-          <div class="t-item"><span class="t-label">Item weight (lbs)</span><input type="number" id="f-weight" step="0.0001" value="${fmtNum(item.weightLbs)}" /></div>
+          <div class="t-item"><span class="t-label">Item weight (lbs)</span><input type="number" id="f-weight" step="0.00001" value="${fmtNum(item.weightLbs)}" /></div>
         </div>
         <div class="sale-fields sale-fields-3">
           <div class="field"><label for="f-baseqty">Number of units produced</label><input type="number" id="f-baseqty" step="0.01" value="${(Number(item.baseMeasureQty) || 0).toFixed(2)}" /></div>
           <div class="field"><label for="f-saleunit">Sale unit</label><select id="f-saleunit"><option value="__add__">+ Add new sale unit\u2026</option>${unitPlaceholder}${unitOptions}</select></div>
-          <div class="field"><label for="f-minqty">Minimum sale quantity</label><input type="number" id="f-minqty" step="0.0001" value="${fmtNum(item.minSaleQty)}" /></div>
+          <div class="field"><label for="f-minqty">Minimum sale quantity</label><input type="number" id="f-minqty" step="0.00001" value="${fmtNum(item.minSaleQty)}" /></div>
         </div>
         <div class="catalogue-strip">
           <div><div class="c-label">Catalogue value (per sale unit)</div><div class="c-val" id="catValueVal"></div></div>
@@ -2436,7 +2439,7 @@ function renderDraftComponentsGrid() {
     html += `<tr>
       <td class="row-name">${escapeHtml(compItem ? compItem.name : 'Unknown item')}</td>
       <td class="num">${fmtCurrency(unitVal)}</td>
-      <td class="num"><input type="number" step="0.0001" value="${fmtNum(c.quantity)}" data-draft-comp-qty="${idx}" /></td>
+      <td class="num"><input type="number" step="0.00001" value="${fmtNum(c.quantity)}" data-draft-comp-qty="${idx}" /></td>
       <td class="num line-cost">${fmtCurrency(lineCost)}</td>
       <td class="num line-weight">${fmtNum(lineWt)}</td>
       <td><button class="row-del" data-draft-comp-del="${idx}" title="Remove">\u00d7</button></td>
@@ -2500,7 +2503,7 @@ function openAddComponentDialog() {
     <div class="field">
       <label>Quantity</label>
       <div class="qty-unit-row">
-        <input type="number" id="newCompQty" step="0.0001" value="1.0000" />
+        <input type="number" id="newCompQty" step="0.00001" value="1.0000" />
         <span class="qty-unit" id="newCompUnit">\u2014</span>
       </div>
     </div>
@@ -2664,7 +2667,7 @@ function renderDraftProfessionsGrid() {
       <td class="row-name">${escapeHtml(prof ? prof.name : 'Unknown profession')}</td>
       <td class="num">${fmtCurrency(dayRate)}</td>
       <td class="num"><input type="number" step="1" value="${ip.numWorkers}" data-draft-prof-workers="${idx}" /></td>
-      <td class="num"><input type="number" step="0.0001" value="${fmtNum(ip.craftingDays)}" data-draft-prof-days="${idx}" /></td>
+      <td class="num"><input type="number" step="0.00001" value="${fmtNum(ip.craftingDays)}" data-draft-prof-days="${idx}" /></td>
       <td class="num line-cost">${fmtCurrency(lineCost)}</td>
       <td><button class="row-del" data-draft-prof-del="${idx}" title="Remove">\u00d7</button></td>
     </tr>`;
@@ -2724,7 +2727,7 @@ function openAddLabourDialog() {
       <div class="combo-chosen" id="profChosen" style="display:none;"></div>
     </div>
     <div class="field"><label>Number of workers</label><input type="number" id="newProfWorkers" step="1" value="1" /></div>
-    <div class="field"><label>Crafting days</label><input type="number" id="newProfDays" step="0.0001" value="1.0000" /></div>
+    <div class="field"><label>Crafting days</label><input type="number" id="newProfDays" step="0.00001" value="1.0000" /></div>
   `, () => {
     const val = document.getElementById('newProfSelect').value;
     if (val === '') { alert('Please choose a profession.'); return false; }
