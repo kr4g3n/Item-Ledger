@@ -547,9 +547,13 @@ input[type="number"] {
 }
 
 /* ===================== List page (catalogue) ===================== */
-.list-page { max-width: 940px; margin: 0 auto; padding: 18px 24px 60px; }
+.list-page { max-width: 940px; margin: 0 auto; padding: 0 24px 60px; }
 .list-toolbar {
-  display: flex; align-items: center; gap: 12px; margin-bottom: 16px; flex-wrap: wrap;
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  position: sticky; top: 0; z-index: 20;
+  background: var(--paper);
+  padding: 14px 0 12px; margin-bottom: 4px;
+  border-bottom: 1px solid var(--rule-light);
 }
 .list-search { flex: 1; min-width: 180px; }
 .list-toolbar-actions { display: flex; gap: 8px; }
@@ -558,6 +562,7 @@ input[type="number"] {
 
 .list-table-wrap {
   background: var(--panel); border: 1px solid var(--rule-light); border-radius: var(--radius); overflow: hidden;
+  margin-top: 12px;
 }
 .list-table { width: 100%; border-collapse: collapse; font-size: 14px; }
 .list-table thead th {
@@ -782,7 +787,7 @@ input[type="number"] {
 <header class="topbar">
   <div>
     <h1><span class="mark">⚖</span> The Item Ledger</h1>
-    <div class="sub">Works fully offline &middot; your data stays on this device &middot; <span style="opacity:0.45">v20</span></div>
+    <div class="sub">Works fully offline &middot; your data stays on this device &middot; <span style="opacity:0.45">v21</span></div>
   </div>
 </header>
 <div class="world-bar" id="worldBar"></div>
