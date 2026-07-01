@@ -787,7 +787,7 @@ input[type="number"] {
 <header class="topbar">
   <div>
     <h1><span class="mark">⚖</span> The Item Ledger</h1>
-    <div class="sub">Works fully offline &middot; your data stays on this device &middot; <span style="opacity:0.45">v21</span></div>
+    <div class="sub">Works fully offline &middot; your data stays on this device &middot; <span style="opacity:0.45">v22</span></div>
   </div>
 </header>
 <div class="world-bar" id="worldBar"></div>
@@ -1151,17 +1151,31 @@ function round5(v) {
 }
 // Backward-compatible alias in case anything still references the old name.
 var round4 = round5;
+// Insert comma thousands separators into a fixed-decimal string, e.g.
+// "1250.50000" -> "1,250.50000". Decimal part is left untouched.
+function groupThousands(fixedStr) {
+  const neg = fixedStr.charAt(0) === '-';
+  let s = neg ? fixedStr.slice(1) : fixedStr;
+  const dot = s.indexOf('.');
+  let intPart = dot === -1 ? s : s.slice(0, dot);
+  const decPart = dot === -1 ? '' : s.slice(dot);
+  intPart = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  return (neg ? '-' : '') + intPart + decPart;
+}
 function fmtCurrency(v) {
   const n = Number(v) || 0;
   const sign = n < 0 ? '-' : '';
-  return sign + '\u20B2' + Math.abs(n).toFixed(5);
+  return sign + '\u20B2' + groupThousands(Math.abs(n).toFixed(5));
 }
 function fmtCurrency2(v) {
   const n = Number(v) || 0;
   const sign = n < 0 ? '-' : '';
-  return sign + '\u20B2' + Math.abs(n).toFixed(2);
+  return sign + '\u20B2' + groupThousands(Math.abs(n).toFixed(2));
 }
-function fmtNum(v) { return (Number(v) || 0).toFixed(5); }
+function fmtNum(v) { return groupThousands((Number(v) || 0).toFixed(5)); }
+// Same precision but NO thousands separators, for values placed inside
+// <input type="number"> boxes (which reject commas).
+function fmtNumInput(v) { return (Number(v) || 0).toFixed(5); }
 function flashEl(el) { el.classList.remove('flash'); void el.offsetWidth; el.classList.add('flash'); }
 
 </script>
@@ -1401,12 +1415,12 @@ function renderItemList() {
       // Show "N unit", using the singular for exactly 1 and the plural otherwise.
       const qtyNum = +mq.toFixed(4);
       const unitWord = su ? (qtyNum === 1 ? su.name : (su.namePlural || su.name)) : '';
-      const unitLabel = su ? `${qtyNum} ${escapeHtml(unitWord)}` : escapeHtml(unitName);
+      const unitLabel = su ? `${groupThousands(String(qtyNum))} ${escapeHtml(unitWord)}` : escapeHtml(unitName);
       html += `<tr class="list-row${sel}${indented ? ' indented' : ''}" data-item-row="${it.id}">
         <td class="lr-name">${escapeHtml(it.name)}${it.isStub ? ' <span class="stub-tag">incomplete</span>' : ''}</td>
         <td class="lr-unit">${unitLabel}</td>
-        <td class="num lr-value">\u20B2${(Number(res.catalogueValue) || 0).toFixed(2)}</td>
-        <td class="num lr-weight">${(Number(res.catalogueWeight) || 0).toFixed(2)}</td>
+        <td class="num lr-value">\u20B2${groupThousands((Number(res.catalogueValue) || 0).toFixed(2))}</td>
+        <td class="num lr-weight">${groupThousands((Number(res.catalogueWeight) || 0).toFixed(2))}</td>
       </tr>`;
     }
   };
@@ -1611,7 +1625,7 @@ function editSkillDialog(id) {
   const sk = isNew ? { name: '', dayRate: 0 } : getSkillLevel(id);
   openDialog(isNew ? 'Add skill level' : 'Edit skill level', `
     <div class="field"><label>Skill level name</label><input type="text" id="dlg-name" value="${escapeHtmlAttr(sk.name)}" /></div>
-    <div class="field"><label>Day rate (\u20B2)</label><input type="number" step="0.00001" id="dlg-rate" value="${fmtNum(sk.dayRate)}" /></div>
+    <div class="field"><label>Day rate (\u20B2)</label><input type="number" step="0.00001" id="dlg-rate" value="${fmtNumInput(sk.dayRate)}" /></div>
   `, () => {
     const name = document.getElementById('dlg-name').value.trim();
     if (!name) { alert('Please enter a name.'); return false; }
@@ -2142,14 +2156,14 @@ function renderEditorPage(app) {
       <div class="totals-block">
         <div class="totals-strip">
           <div class="t-item"><span class="t-label">Total cost</span><span class="t-val" id="totalCostVal"></span></div>
-          <div class="t-item"><span class="t-label">Markup</span><input type="number" id="f-markup" step="0.00001" value="${fmtNum(item.markupAmount)}" /></div>
+          <div class="t-item"><span class="t-label">Markup</span><input type="number" id="f-markup" step="0.00001" value="${fmtNumInput(item.markupAmount)}" /></div>
           <div class="t-item t-final"><span class="t-label">Item value</span><span class="t-val" id="itemValueVal"></span></div>
-          <div class="t-item"><span class="t-label">Item weight (lbs)</span><input type="number" id="f-weight" step="0.00001" value="${fmtNum(item.weightLbs)}" /></div>
+          <div class="t-item"><span class="t-label">Item weight (lbs)</span><input type="number" id="f-weight" step="0.00001" value="${fmtNumInput(item.weightLbs)}" /></div>
         </div>
         <div class="sale-fields sale-fields-3">
           <div class="field"><label for="f-baseqty">Number of units produced</label><input type="number" id="f-baseqty" step="0.01" value="${(Number(item.baseMeasureQty) || 0).toFixed(2)}" /></div>
           <div class="field"><label for="f-saleunit">Sale unit</label><select id="f-saleunit"><option value="__add__">+ Add new sale unit\u2026</option>${unitPlaceholder}${unitOptions}</select></div>
-          <div class="field"><label for="f-minqty">Minimum sale quantity</label><input type="number" id="f-minqty" step="0.00001" value="${fmtNum(item.minSaleQty)}" /></div>
+          <div class="field"><label for="f-minqty">Minimum sale quantity</label><input type="number" id="f-minqty" step="0.00001" value="${fmtNumInput(item.minSaleQty)}" /></div>
         </div>
         <div class="catalogue-strip">
           <div><div class="c-label">Catalogue value (per sale unit)</div><div class="c-val" id="catValueVal"></div></div>
@@ -2444,7 +2458,7 @@ function renderDraftComponentsGrid() {
     html += `<tr>
       <td class="row-name">${escapeHtml(compItem ? compItem.name : 'Unknown item')}</td>
       <td class="num">${fmtCurrency(unitVal)}</td>
-      <td class="num"><input type="number" step="0.00001" value="${fmtNum(c.quantity)}" data-draft-comp-qty="${idx}" /></td>
+      <td class="num"><input type="number" step="0.00001" value="${fmtNumInput(c.quantity)}" data-draft-comp-qty="${idx}" /></td>
       <td class="num line-cost">${fmtCurrency(lineCost)}</td>
       <td class="num line-weight">${fmtNum(lineWt)}</td>
       <td><button class="row-del" data-draft-comp-del="${idx}" title="Remove">\u00d7</button></td>
@@ -2672,7 +2686,7 @@ function renderDraftProfessionsGrid() {
       <td class="row-name">${escapeHtml(prof ? prof.name : 'Unknown profession')}</td>
       <td class="num">${fmtCurrency(dayRate)}</td>
       <td class="num"><input type="number" step="1" value="${ip.numWorkers}" data-draft-prof-workers="${idx}" /></td>
-      <td class="num"><input type="number" step="0.00001" value="${fmtNum(ip.craftingDays)}" data-draft-prof-days="${idx}" /></td>
+      <td class="num"><input type="number" step="0.00001" value="${fmtNumInput(ip.craftingDays)}" data-draft-prof-days="${idx}" /></td>
       <td class="num line-cost">${fmtCurrency(lineCost)}</td>
       <td><button class="row-del" data-draft-prof-del="${idx}" title="Remove">\u00d7</button></td>
     </tr>`;
