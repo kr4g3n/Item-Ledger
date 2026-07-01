@@ -787,7 +787,7 @@ input[type="number"] {
 <header class="topbar">
   <div>
     <h1><span class="mark">⚖</span> The Item Ledger</h1>
-    <div class="sub">Works fully offline &middot; your data stays on this device &middot; <span style="opacity:0.45">v22</span></div>
+    <div class="sub">Works fully offline &middot; your data stays on this device &middot; <span style="opacity:0.45">v23</span></div>
   </div>
 </header>
 <div class="world-bar" id="worldBar"></div>
@@ -1219,6 +1219,12 @@ window.addEventListener('popstate', function (e) {
 
 function render() {
   const app = document.getElementById('appRoot');
+  // Reset scroll to top BEFORE painting the editor so a tall form doesn't
+  // briefly appear scrolled down.
+  if (currentScreen === 'editor') {
+    try { window.scrollTo(0, 0); } catch (_) {}
+    const m = document.querySelector('.main'); if (m) m.scrollTop = 0;
+  }
   renderTopBar();
   switch (currentScreen) {
     case 'home': renderHome(app); break;
@@ -1230,6 +1236,14 @@ function render() {
     case 'categoryGroups': renderCategoryGroupsScreen(app); break;
     case 'saleUnits': renderSaleUnitsScreen(app); break;
     default: renderHome(app);
+  }
+  // And again after paint, in case the browser tried to restore a prior position.
+  if (currentScreen === 'editor') {
+    requestAnimationFrame(() => {
+      try { window.scrollTo(0, 0); } catch (_) {}
+      const main = document.querySelector('.main');
+      if (main) main.scrollTop = 0;
+    });
   }
 }
 
@@ -1342,6 +1356,7 @@ function updateListToolbarButtons() {
 
 let collapsedCategories = new Set();  // category names currently collapsed
 let collapsedGroups = new Set();      // group keys currently collapsed
+let listInitialised = false;          // first render collapses categories; later renders keep user's state
 
 function renderItemList() {
   const wrap = document.getElementById('listTableWrap');
@@ -1385,6 +1400,18 @@ function renderItemList() {
     .sort((a, b) => a.name.localeCompare(b.name)).map(c => c.id);
   // items whose category is missing entirely
   const orphanItems = itemsByCat.get(undefined) || itemsByCat.get(null) || [];
+
+  // On the very first render after load/refresh, start with every category
+  // collapsed (groups + category headings visible, items hidden). After this,
+  // the user's expand/collapse choices are preserved across page switches.
+  if (!listInitialised) {
+    for (const sec of sections) {
+      if (sec.type === 'group') sec.cats.forEach(cid => collapsedCategories.add('cat:' + cid));
+    }
+    looseCats.forEach(cid => collapsedCategories.add('cat:' + cid));
+    if (orphanItems.length) collapsedCategories.add('cat:' + undefined);
+    listInitialised = true;
+  }
 
   let html = `<table class="list-table">
     <thead><tr>
