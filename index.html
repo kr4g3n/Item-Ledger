@@ -781,13 +781,17 @@ input[type="number"] {
 .qty-unit { flex: 0 0 auto; font-size: 14px; color: var(--ink-soft); min-width: 60px; }
 .qty-weight-note { margin-top: 6px; font-size: 13px; color: var(--ink-soft); font-variant-numeric: tabular-nums; }
 
+/* Rarities table: description column and rank cell */
+.data-table .dt-desc { color: var(--ink-soft); font-size: 13px; max-width: 380px; }
+.data-table .dt-rank { font-variant-numeric: tabular-nums; font-weight: 600; }
+
 </style>
 </head>
 <body>
 <header class="topbar">
   <div>
     <h1><span class="mark">⚖</span> The Item Ledger</h1>
-    <div class="sub">Works fully offline &middot; your data stays on this device &middot; <span style="opacity:0.45">v23</span></div>
+    <div class="sub">Works fully offline &middot; your data stays on this device &middot; <span style="opacity:0.45">v24</span></div>
   </div>
 </header>
 <div class="world-bar" id="worldBar"></div>
@@ -822,7 +826,7 @@ let state = null;
 let currentItemId = null;
 
 function blankWorldData() {
-  return { items: [], components: [], professions: [], skillLevels: [], categories: [], saleUnits: [], itemProfessions: [], categoryGroups: [] };
+  return { items: [], components: [], professions: [], skillLevels: [], categories: [], saleUnits: [], itemProfessions: [], categoryGroups: [], rarities: [] };
 }
 function makeWorld(name, data) {
   return { id: 'w' + Date.now() + Math.floor(Math.random() * 100000), name: name, data: data };
@@ -925,8 +929,9 @@ function setActiveWorldInMemory(worldId) {
   const w = library.worlds.find(x => x.id === worldId) || library.worlds[0];
   library.activeWorldId = w.id;
   state = w.data;
-  // Backward-compat: older worlds may lack category groups
+  // Backward-compat: older worlds may lack category groups / rarities
   if (!Array.isArray(state.categoryGroups)) state.categoryGroups = [];
+  if (!Array.isArray(state.rarities)) state.rarities = [];
   for (const c of state.categories) { if (!('groupId' in c)) c.groupId = null; }
   currentItemId = state.items.length ? state.items[0].id : null;
   invalidateParentIndex();
@@ -1004,6 +1009,9 @@ function getSkillLevel(id) { return state.skillLevels.find(s => s.id === id); }
 function getSaleUnit(id) { return state.saleUnits.find(s => s.id === id); }
 function getCategory(id) { return state.categories.find(c => c.id === id); }
 function getCategoryGroup(id) { return (state.categoryGroups || []).find(g => g.id === id); }
+function getRarity(id) { return (state.rarities || []).find(r => r.id === id); }
+// Rarities sorted by rank (ascending), for dropdowns and the editor list.
+function raritiesByRank() { return (state.rarities || []).slice().sort((a, b) => (a.rank || 0) - (b.rank || 0) || a.name.localeCompare(b.name)); }
 function componentsOf(itemId) { return state.components.filter(c => c.parentItemId === itemId); }
 function professionsOf(itemId) { return state.itemProfessions.filter(ip => ip.itemId === itemId); }
 function usedAsComponentElsewhere(itemId) { return state.components.filter(c => c.componentItemId === itemId); }
@@ -1235,6 +1243,7 @@ function render() {
     case 'categories': renderCategoriesScreen(app); break;
     case 'categoryGroups': renderCategoryGroupsScreen(app); break;
     case 'saleUnits': renderSaleUnitsScreen(app); break;
+    case 'rarities': renderRaritiesScreen(app); break;
     default: renderHome(app);
   }
   // And again after paint, in case the browser tried to restore a prior position.
@@ -1286,6 +1295,7 @@ function renderHome(app) {
         ${tile('categories', 'Categories', 'How items are grouped in the catalogue', counts.categories + ' categories')}
         ${tile('categoryGroups', 'Category Groups', 'Optional higher tier grouping categories together', (state.categoryGroups || []).length + ' groups')}
         ${tile('saleUnits', 'Sale Units', 'Units items are sold by, and how they price', counts.saleUnits + ' units')}
+        ${tile('rarities', 'Rarities', 'Rarity levels, ranked from common to mythic', (state.rarities || []).length + ' rarities')}
       </div>
       <div class="home-foot">
         <span class="home-foot-note">Worlds are stored in this browser. Use <strong>Manage worlds</strong> (top of screen) to export a backup or move a world to another device.</span>
@@ -1421,7 +1431,13 @@ function renderItemList() {
   const renderCatBlock = (catId, indented) => {
     const cat = catsById.get(catId);
     const catName = cat ? cat.name : 'Uncategorised';
-    const items = (itemsByCat.get(catId) || []).slice().sort((a, b) => a.name.localeCompare(b.name));
+    const items = (itemsByCat.get(catId) || []).slice().sort((a, b) => {
+      const ra = getRarity(a.rarityId), rb = getRarity(b.rarityId);
+      const rankA = ra ? (ra.rank || 0) : Infinity;   // items with no rarity sort last
+      const rankB = rb ? (rb.rank || 0) : Infinity;
+      if (rankA !== rankB) return rankA - rankB;
+      return a.name.localeCompare(b.name);
+    });
     const catKey = 'cat:' + catId;
     const isCollapsed = !searching && collapsedCategories.has(catKey);
     html += `<tr class="list-cat-row"><td colspan="4">
@@ -1859,6 +1875,73 @@ function renderSaleUnitsScreen(app) {
   app.querySelectorAll('[data-del-unit]').forEach(b => b.addEventListener('click', () => deleteUnit(Number(b.dataset.delUnit))));
 }
 
+function renderRaritiesScreen(app) {
+  const rows = raritiesByRank();
+  app.innerHTML = `
+    ${backBar('Rarities')}
+    <div class="table-screen">
+      <p class="screen-note">Rarity levels are ordered by their <strong>rarity value</strong> (1 = lowest / most common). The value is the sort key, so you can insert new levels between existing ones later. Items sort by rarity within each category.</p>
+      <table class="data-table">
+        <thead><tr><th class="num">Value</th><th>Rarity</th><th>Description</th><th class="num">Items</th><th></th></tr></thead>
+        <tbody>
+          ${rows.map(r => {
+            const used = usageCount(it => it.rarityId === r.id);
+            return `<tr>
+              <td class="num dt-rank">${r.rank}</td>
+              <td class="dt-name">${escapeHtml(r.name)}</td>
+              <td class="dt-desc">${escapeHtml(r.description || '')}</td>
+              <td class="num dt-used">${used}</td>
+              <td class="dt-actions">
+                <button class="btn btn-sm" data-edit-rarity="${r.id}">Edit</button>
+                <button class="btn btn-wax btn-sm" data-del-rarity="${r.id}">Delete</button>
+              </td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>
+      <button class="btn btn-moss" id="addRarityBtn">+ Add rarity</button>
+    </div>
+  `;
+  wireBack();
+  document.getElementById('addRarityBtn').addEventListener('click', () => editRarityDialog(null));
+  app.querySelectorAll('[data-edit-rarity]').forEach(b => b.addEventListener('click', () => editRarityDialog(Number(b.dataset.editRarity))));
+  app.querySelectorAll('[data-del-rarity]').forEach(b => b.addEventListener('click', () => deleteRarity(Number(b.dataset.delRarity))));
+}
+
+function editRarityDialog(id) {
+  if (!Array.isArray(state.rarities)) state.rarities = [];
+  const isNew = id == null;
+  const r = isNew ? { name: '', rank: (state.rarities.length ? Math.max(...state.rarities.map(x => x.rank || 0)) + 1 : 1), description: '' } : getRarity(id);
+  openDialog(isNew ? 'Add rarity' : 'Edit rarity', `
+    <div class="field"><label>Rarity name</label><input type="text" id="dlg-name" value="${escapeHtmlAttr(r.name)}" /></div>
+    <div class="field"><label>Rarity value (1 = lowest)</label><input type="number" id="dlg-rank" step="1" value="${r.rank}" /></div>
+    <div class="field"><label>Description (optional)</label><textarea id="dlg-desc">${escapeHtml(r.description || '')}</textarea></div>
+  `, () => {
+    const name = document.getElementById('dlg-name').value.trim();
+    if (!name) { alert('Please enter a name.'); return false; }
+    const rank = parseFloat(document.getElementById('dlg-rank').value);
+    if (isNaN(rank)) { alert('Please enter a rarity value.'); return false; }
+    const desc = document.getElementById('dlg-desc').value;
+    if (isNew) state.rarities.push({ id: nextId(state.rarities), name, rank, description: desc });
+    else { r.name = name; r.rank = rank; r.description = desc; }
+    saveState(); render(); return true;
+  }, { requireSelectors: ['dlg-name', 'dlg-rank'] });
+}
+
+function deleteRarity(id) {
+  const r = getRarity(id);
+  if (!r) return;
+  const used = usageCount(it => it.rarityId === id);
+  let msg = `Delete rarity "${r.name}"?`;
+  if (used > 0) msg += `\n\nIt is currently assigned to ${used} item(s). Those items will be left with no rarity and will need one set again before they can be saved.`;
+  if (!confirm(msg)) return;
+  if (used > 0) { state.items.forEach(it => { if (it.rarityId === id) it.rarityId = null; }); }
+  state.rarities = state.rarities.filter(x => x.id !== id);
+  invalidateAll();
+  saveState();
+  render();
+}
+
 function editUnitDialog(id) {
   const isNew = id == null;
   const unit = isNew ? { name: '', namePlural: '', type: '' } : getSaleUnit(id);
@@ -1977,6 +2060,7 @@ function normaliseImportedData(parsed) {
   clean.saleUnits = data.saleUnits || [];
   clean.itemProfessions = data.itemProfessions || [];
   clean.categoryGroups = data.categoryGroups || [];
+  clean.rarities = data.rarities || [];
   for (const c of clean.categories) { if (!('groupId' in c)) c.groupId = null; }
   return { data: clean, name };
 }
@@ -2058,7 +2142,7 @@ function openNewItemEditor() {
   draftIsNew = true;
   draftItem = {
     id: nextId(state.items),
-    name: '', categoryId: null, isMagic: false,
+    name: '', categoryId: null, isMagic: false, rarityId: null,
     weightLbs: 0, minSaleQty: 1, saleUnitId: null,
     baseMeasureQty: 0, markupAmount: 0, description: '', craftingDescription: '',
     _components: [],
@@ -2142,6 +2226,9 @@ function renderEditorPage(app) {
   const unitPlaceholder = `<option value="" ${item.saleUnitId == null ? 'selected' : ''}>[Select]</option>`;
   const unitOptions = state.saleUnits.slice().sort((a, b) => a.name.localeCompare(b.name))
     .map(u => `<option value="${u.id}" ${u.id === item.saleUnitId ? 'selected' : ''}>${escapeHtml(u.name)}</option>`).join('');
+  const rarityPlaceholder = `<option value="" ${item.rarityId == null ? 'selected' : ''}>[Select]</option>`;
+  const rarityOptions = raritiesByRank()
+    .map(r => `<option value="${r.id}" ${r.id === item.rarityId ? 'selected' : ''}>${escapeHtml(r.name)}</option>`).join('');
 
   app.innerHTML = `
     <div class="screen-head editor-head-bar">
@@ -2157,6 +2244,7 @@ function renderEditorPage(app) {
         <input id="itemNameInput" class="item-name-input" type="text" placeholder="Item name" value="${escapeHtmlAttr(item.name)}" />
         <div class="editor-header-meta">
           <div class="field"><label for="f-category">Category</label><select id="f-category"><option value="__add__">+ Add new category\u2026</option>${catPlaceholder}${catOptions}</select></div>
+          <div class="field"><label for="f-rarity">Rarity</label><select id="f-rarity"><option value="__add__">+ Add new rarity\u2026</option>${rarityPlaceholder}${rarityOptions}</select></div>
           <div class="field field-checkbox"><input type="checkbox" id="f-magic" ${item.isMagic ? 'checked' : ''} /><label for="f-magic">Magic item</label></div>
         </div>
       </div>
@@ -2221,6 +2309,11 @@ function renderEditorPage(app) {
     item.categoryId = e.target.value === '' ? null : Number(e.target.value);
     updateEditorSaveState();
   });
+  document.getElementById('f-rarity').addEventListener('change', e => {
+    if (e.target.value === '__add__') { e.target.value = item.rarityId != null ? item.rarityId : ''; addNewRarityInline(); return; }
+    item.rarityId = e.target.value === '' ? null : Number(e.target.value);
+    updateEditorSaveState();
+  });
   document.getElementById('f-magic').addEventListener('change', e => { item.isMagic = e.target.checked; });
   document.getElementById('f-weight').addEventListener('input', e => {
     item.weightLbs = parseFloat(e.target.value) || 0;
@@ -2252,6 +2345,8 @@ function renderEditorPage(app) {
   // add-new sits at the top of these selects, so explicitly select the real value
   const catSel = document.getElementById('f-category');
   if (catSel && item.categoryId != null) catSel.value = String(item.categoryId);
+  const raritySel = document.getElementById('f-rarity');
+  if (raritySel && item.rarityId != null) raritySel.value = String(item.rarityId);
   const unitSel = document.getElementById('f-saleunit');
   if (unitSel && item.saleUnitId != null) unitSel.value = String(item.saleUnitId);
 
@@ -2261,7 +2356,7 @@ function renderEditorPage(app) {
 // Disable "Save item" until the required fields (name, category, sale unit) are set.
 function updateEditorSaveState() {
   if (!draftItem) return;
-  const ok = !!(draftItem.name && draftItem.name.trim()) && draftItem.categoryId != null && draftItem.saleUnitId != null;
+  const ok = !!(draftItem.name && draftItem.name.trim()) && draftItem.categoryId != null && draftItem.saleUnitId != null && draftItem.rarityId != null;
   ['editorSaveBtn', 'editorSaveBtnBottom'].forEach(id => {
     const btn = document.getElementById(id);
     if (btn) { btn.disabled = !ok; btn.classList.toggle('btn-disabled', !ok); }
@@ -2344,6 +2439,37 @@ function refreshSaleUnitSelect() {
     .map(u => `<option value="${u.id}" ${u.id === draftItem.saleUnitId ? 'selected' : ''}>${escapeHtml(u.name)}</option>`).join('');
   sel.innerHTML = '<option value="__add__">+ Add new sale unit\u2026</option>' + opts;
 }
+
+function refreshRaritySelect() {
+  const sel = document.getElementById('f-rarity');
+  if (!sel) return;
+  const opts = raritiesByRank()
+    .map(r => `<option value="${r.id}" ${r.id === draftItem.rarityId ? 'selected' : ''}>${escapeHtml(r.name)}</option>`).join('');
+  sel.innerHTML = '<option value="__add__">+ Add new rarity\u2026</option>' + opts;
+}
+
+function addNewRarityInline() {
+  if (!Array.isArray(state.rarities)) state.rarities = [];
+  const nextRank = state.rarities.length ? Math.max(...state.rarities.map(r => r.rank || 0)) + 1 : 1;
+  openDialog('Add rarity', `
+    <div class="field"><label>Rarity name</label><input type="text" id="dlg-name" /></div>
+    <div class="field"><label>Rarity value (1 = lowest)</label><input type="number" id="dlg-rank" step="1" value="${nextRank}" /></div>
+    <div class="field"><label>Description (optional)</label><textarea id="dlg-desc"></textarea></div>
+  `, () => {
+    const name = document.getElementById('dlg-name').value.trim();
+    if (!name) { alert('Please enter a name.'); return false; }
+    const rank = parseFloat(document.getElementById('dlg-rank').value);
+    if (isNaN(rank)) { alert('Please enter a rarity value.'); return false; }
+    const id = nextId(state.rarities);
+    state.rarities.push({ id, name, rank, description: document.getElementById('dlg-desc').value });
+    draftItem.rarityId = id;
+    saveState();
+    refreshRaritySelect();
+    updateEditorSaveState();
+    return true;
+  }, { requireSelectors: ['dlg-name', 'dlg-rank'] });
+}
+
 function addNewSaleUnitInline() {
   const types = ['weight', 'count', 'measure'];
   const typeOpts = types.map(t => `<option value="${t}">${t}</option>`).join('');
