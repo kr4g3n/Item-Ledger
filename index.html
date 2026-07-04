@@ -740,9 +740,12 @@ input[type="number"] {
 .editor-header-meta .field-checkbox label { text-transform: none; letter-spacing: 0; font-size: 13px; color: var(--ink-soft); }
 
 @media (max-width: 640px) {
-  .editor-header-meta { width: 100%; gap: 14px; }
-  .editor-header-meta select { min-width: 0; }
-  .editor-header-meta .field:first-child { flex: 1; }
+  .editor-header-meta { width: 100%; gap: 10px; flex-wrap: nowrap; align-items: flex-end; }
+  .editor-header-meta select { min-width: 0; width: 100%; box-sizing: border-box; }
+  /* Category and Rarity share the space as flexible thirds; Magic takes only
+     what it needs so the whole row fits on a narrow phone. */
+  .editor-header-meta .field { min-width: 0; flex: 1 1 0; }
+  .editor-header-meta .field-checkbox { flex: 0 0 auto; white-space: nowrap; }
 }
 
 /* Disabled dialog Save button (required field not yet chosen) */
@@ -791,7 +794,7 @@ input[type="number"] {
 <header class="topbar">
   <div>
     <h1><span class="mark">⚖</span> The Item Ledger</h1>
-    <div class="sub">Works fully offline &middot; your data stays on this device &middot; <span style="opacity:0.45">v24</span></div>
+    <div class="sub">Works fully offline &middot; your data stays on this device &middot; <span style="opacity:0.45">v25</span></div>
   </div>
 </header>
 <div class="world-bar" id="worldBar"></div>
