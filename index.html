@@ -789,13 +789,18 @@ input[type="number"] {
 .data-table .dt-rank { font-variant-numeric: tabular-nums; font-weight: 600; }
 
 /* Currency notation on its own line under the VALUE column header */
-.list-table thead th .th-sub { font-size: 10px; font-weight: normal; opacity: 0.8; letter-spacing: 0; text-transform: none; }
+/* Currency notation under VALUE: bold (matching VALUE), coloured coins,
+   parentheses in the header's own colour. */
+.list-table thead th .th-sub { font-size: 11px; font-weight: 700; opacity: 1; letter-spacing: 0; text-transform: none; }
+.list-table thead th .th-sub .th-paren { color: var(--ink-faint); }
+.list-table thead th .th-sub .coin-g { color: #c08a1e; }   /* Guilder - gold */
+.list-table thead th .th-sub .coin-s { color: #7d8085; }   /* Shilling - silver */
+.list-table thead th .th-sub .coin-c { color: #b06a3a; }   /* Copper */
 
 /* Coloured, bold currency notation in the VALUE header: gold / silver / copper */
-.th-coin { font-weight: 700; opacity: 1; }
-.th-coin .coin-g { color: #c08a1e; }   /* Guilder - gold */
-.th-coin .coin-s { color: #7d8085; }   /* Shilling - silver (darkened for cream bg) */
-.th-coin .coin-c { color: #b06a3a; }   /* Copper */
+
+/* Centre the VALUE column header (data cells stay right-aligned) */
+.list-table thead th.th-value { text-align: center; }
 
 </style>
 </head>
@@ -803,7 +808,7 @@ input[type="number"] {
 <header class="topbar">
   <div>
     <h1><span class="mark">⚖</span> The Item Ledger</h1>
-    <div class="sub">Works fully offline &middot; your data stays on this device &middot; <span style="opacity:0.45">v27</span></div>
+    <div class="sub">Works fully offline &middot; your data stays on this device &middot; <span style="opacity:0.45">v29</span></div>
   </div>
 </header>
 <div class="world-bar" id="worldBar"></div>
@@ -1437,7 +1442,7 @@ function renderItemList() {
 
   let html = `<table class="list-table">
     <thead><tr>
-      <th>Description</th><th>Unit</th><th class="num">Value<br><span class="th-sub th-coin">(<span class="coin-g">\u20B2</span>.<span class="coin-s">\uFE69</span><span class="coin-c">\u00a2</span>)</span></th><th class="num">Weight</th>
+      <th>Description</th><th>Unit</th><th class="num th-value">Value<br><span class="th-sub"><span class="th-paren">(</span><span class="coin-g">\u20B2</span>.<span class="coin-s">\uFE69</span><span class="coin-c">\u00a2</span><span class="th-paren">)</span></span></th><th class="num">Weight</th>
     </tr></thead><tbody>`;
 
   const renderCatBlock = (catId, indented) => {
