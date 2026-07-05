@@ -791,11 +791,14 @@ input[type="number"] {
 /* Currency notation on its own line under the VALUE column header */
 /* Currency notation under VALUE: bold (matching VALUE), coloured coins,
    parentheses in the header's own colour. */
-.list-table thead th .th-sub { font-size: 11px; font-weight: 700; opacity: 1; letter-spacing: 0; text-transform: none; }
-.list-table thead th .th-sub .th-paren { color: var(--ink-faint); }
-.list-table thead th .th-sub .coin-g { color: #c08a1e; }   /* Guilder - gold */
-.list-table thead th .th-sub .coin-s { color: #7d8085; }   /* Shilling - silver */
-.list-table thead th .th-sub .coin-c { color: #b06a3a; }   /* Copper */
+/* Currency notation under VALUE: bold, coloured coins. The Guilder (and the
+   parentheses wrapping it) are enlarged so ₲ stands nearly double the height
+   of the smaller . s ¢ symbols. */
+.list-table thead th .th-sub { font-size: 11px; font-weight: 700; opacity: 1; letter-spacing: 0; text-transform: none; line-height: 1; }
+.list-table thead th .th-sub .th-paren { color: var(--ink-faint); font-size: 17px; vertical-align: middle; }
+.list-table thead th .th-sub .coin-g { color: #c08a1e; font-size: 17px; vertical-align: middle; }   /* Guilder - gold */
+.list-table thead th .th-sub .coin-s { color: #7d8085; vertical-align: middle; }   /* Shilling - silver */
+.list-table thead th .th-sub .coin-c { color: #b06a3a; vertical-align: middle; }   /* Copper */
 
 /* Coloured, bold currency notation in the VALUE header: gold / silver / copper */
 
@@ -808,7 +811,7 @@ input[type="number"] {
 <header class="topbar">
   <div>
     <h1><span class="mark">⚖</span> The Item Ledger</h1>
-    <div class="sub">Works fully offline &middot; your data stays on this device &middot; <span style="opacity:0.45">v29</span></div>
+    <div class="sub">Works fully offline &middot; your data stays on this device &middot; <span style="opacity:0.45">v30</span></div>
   </div>
 </header>
 <div class="world-bar" id="worldBar"></div>
