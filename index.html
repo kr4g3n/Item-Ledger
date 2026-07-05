@@ -811,7 +811,7 @@ input[type="number"] {
 <header class="topbar">
   <div>
     <h1><span class="mark">⚖</span> The Item Ledger</h1>
-    <div class="sub">Works fully offline &middot; your data stays on this device &middot; <span style="opacity:0.45">v31</span></div>
+    <div class="sub">Works fully offline &middot; your data stays on this device &middot; <span style="opacity:0.45">v32</span></div>
   </div>
 </header>
 <div class="world-bar" id="worldBar"></div>
@@ -2982,11 +2982,39 @@ document.addEventListener('DOMContentLoaded', boot);
 
 </script>
 <script>
+
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', function () {
-    navigator.serviceWorker.register('sw.js').catch(function (e) { console.log('SW not registered:', e && e.message); });
+    navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).then(function (reg) {
+      // Check for a new version right away, and whenever the app regains focus.
+      reg.update();
+      document.addEventListener('visibilitychange', function () {
+        if (document.visibilityState === 'visible') reg.update();
+      });
+      // When a new worker is found and installed, ask it to activate immediately.
+      reg.addEventListener('updatefound', function () {
+        var nw = reg.installing;
+        if (!nw) return;
+        nw.addEventListener('statechange', function () {
+          if (nw.state === 'installed' && navigator.serviceWorker.controller) {
+            nw.postMessage && reg.waiting && reg.waiting.postMessage('SKIP_WAITING');
+            if (reg.waiting) reg.waiting.postMessage('SKIP_WAITING');
+          }
+        });
+      });
+    }).catch(function (e) { console.log('SW not registered:', e && e.message); });
+
+    // When the controlling worker changes (new version activated), reload once so
+    // the visible page runs the new code. Guard prevents reload loops.
+    var refreshing = false;
+    navigator.serviceWorker.addEventListener('controllerchange', function () {
+      if (refreshing) return;
+      refreshing = true;
+      window.location.reload();
+    });
   });
 }
+
 </script>
 </body>
 </html>
