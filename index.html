@@ -430,12 +430,12 @@ input[type="number"] {
 /* ===================== Multi-screen additions ===================== */
 .world-bar {
   display: flex;
-  align-items: center;
-  gap: 10px;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0;
   padding: 8px 20px;
   background: #241d17;
   border-bottom: 1px solid #3a3026;
-  flex-wrap: wrap;
 }
 .world-bar .world-label {
   font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: #b3a888;
@@ -830,13 +830,21 @@ input[type="number"] {
 .safe-close-card p { margin: 6px 0; color: var(--ink-soft); }
 .safe-close-card .btn { margin-top: 14px; }
 
+/* World bar: two rows (world selector, then backup actions) */
+.world-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.backup-bar { display: flex; align-items: center; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+.backup-bar-indic { color: var(--ink-faint); font-size: 12px; margin-left: auto; white-space: nowrap; }
+@media (max-width: 480px) {
+  .backup-bar-indic { margin-left: 0; width: 100%; }
+}
+
 </style>
 </head>
 <body>
 <header class="topbar">
   <div>
     <h1><span class="mark">⚖</span> The Item Ledger</h1>
-    <div class="sub">Works fully offline &middot; your data stays on this device &middot; <span style="opacity:0.45">v34</span></div>
+    <div class="sub">Works fully offline &middot; your data stays on this device &middot; <span style="opacity:0.45">v35</span></div>
   </div>
 </header>
 <div class="world-bar" id="worldBar"></div>
@@ -1391,15 +1399,27 @@ function renderTopBar() {
     `<option value="${w.id}" ${w.id === library.activeWorldId ? 'selected' : ''}>${escapeHtml(w.name)}</option>`
   ).join('');
   bar.innerHTML = `
-    <label class="world-label">World</label>
-    <select id="worldSelect">${opts}</select>
-    <button class="btn btn-ghost btn-sm" id="worldManageBtn">Manage worlds\u2026</button>
+    <div class="world-row">
+      <label class="world-label">World</label>
+      <select id="worldSelect">${opts}</select>
+      <button class="btn btn-ghost btn-sm" id="worldManageBtn">Manage worlds\u2026</button>
+    </div>
+    <div class="backup-bar">
+      <button class="btn btn-moss btn-sm" id="barBackupBtn">Backup</button>
+      <button class="btn btn-wax btn-sm" id="barBackupCloseBtn">Backup &amp; close</button>
+      <span class="backup-bar-indic" id="backupIndicator">\u2026</span>
+    </div>
   `;
   document.getElementById('worldSelect').addEventListener('change', async e => {
     await switchWorld(e.target.value);
     render();
   });
   document.getElementById('worldManageBtn').addEventListener('click', openWorldManager);
+  document.getElementById('barBackupBtn').addEventListener('click', () => backupNow(true).then(() => { if (currentScreen === 'backups') renderBackupList(); }));
+  document.getElementById('barBackupCloseBtn').addEventListener('click', () => {
+    if (confirm('Download a backup file and then close the app?')) backupAndClose();
+  });
+  updateBackupIndicator();
 }
 
 /* ===================== Home screen ===================== */
@@ -2013,9 +2033,8 @@ function renderBackupsScreen(app) {
       <div class="backup-actions">
         <button class="btn btn-moss" id="bkNow">Backup now (snapshot + file)</button>
         <button class="btn" id="bkSnap">Snapshot only</button>
-        <button class="btn btn-wax" id="bkClose">Backup &amp; close</button>
       </div>
-      <p class="backup-indic" id="backupIndicatorLine"><span id="backupIndicator">\u2026</span></p>
+      <p class="backup-indic" id="backupIndicatorLine">Backup and <em>Backup &amp; close</em> are also on the bar at the top of every screen. <span id="backupIndicatorScreen">\u2026</span></p>
 
       <div class="backup-settings">
         <h3>Automatic backups</h3>
@@ -2042,9 +2061,6 @@ function renderBackupsScreen(app) {
   wireBack();
   document.getElementById('bkNow').addEventListener('click', () => backupNow(true).then(() => renderBackupList()));
   document.getElementById('bkSnap').addEventListener('click', () => backupNow(false).then(() => renderBackupList()));
-  document.getElementById('bkClose').addEventListener('click', () => {
-    if (confirm('Download a backup file and then attempt to close the app?')) backupAndClose();
-  });
 
   // load settings into controls
   getBackupSettings().then(s => {
@@ -2294,18 +2310,23 @@ async function backupNow(alsoDownload) {
   }
 }
 
-// "Backup & close": make a file backup + snapshot, then try to close the tab.
+// "Backup & close": make a file backup + snapshot, then close the app.
+// window.close() works in an installed PWA (standalone) and for script-opened
+// tabs; where the browser blocks it, we show a clear 'safe to close' notice.
 async function backupAndClose() {
   try {
     await createBackupSnapshot('manual');
     downloadActiveWorldBackup();
   } catch (e) { console.error(e); }
-  // Give the download a moment to start before attempting to close.
+  // Give the download a moment to start, then attempt to close.
   setTimeout(() => {
-    window.open('', '_self');
-    window.close();
-    // Many browsers refuse window.close() for tabs they didn't open; show a notice.
-    showSafeToCloseOverlay();
+    let closed = false;
+    try {
+      window.open('', '_self'); // legacy trick to allow close() in some browsers
+      window.close();
+    } catch (e) {}
+    // If we're still here shortly after, closing was blocked (normal browser tab).
+    setTimeout(() => { if (!document.hidden) showSafeToCloseOverlay(); }, 400);
   }, 600);
 }
 
@@ -2354,17 +2375,21 @@ function scheduleAutoBackup(intervalMin, autoDownload) {
 }
 
 async function updateBackupIndicator() {
-  const el = document.getElementById('backupIndicator');
-  if (!el) return;
+  const els = [document.getElementById('backupIndicator'), document.getElementById('backupIndicatorScreen')].filter(Boolean);
+  if (!els.length) return;
   const last = await getLastBackupAt();
-  if (!last) { el.textContent = 'No backup yet'; return; }
-  const mins = Math.round((Date.now() - new Date(last).getTime()) / 60000);
-  let ago;
-  if (mins < 1) ago = 'just now';
-  else if (mins < 60) ago = mins + ' min ago';
-  else if (mins < 1440) ago = Math.round(mins / 60) + ' hr ago';
-  else ago = Math.round(mins / 1440) + ' day(s) ago';
-  el.textContent = 'Last backup: ' + ago;
+  let text;
+  if (!last) { text = 'No backup yet'; }
+  else {
+    const mins = Math.round((Date.now() - new Date(last).getTime()) / 60000);
+    let ago;
+    if (mins < 1) ago = 'just now';
+    else if (mins < 60) ago = mins + ' min ago';
+    else if (mins < 1440) ago = Math.round(mins / 60) + ' hr ago';
+    else ago = Math.round(mins / 1440) + ' day(s) ago';
+    text = 'Last backup: ' + ago;
+  }
+  els.forEach(el => { el.textContent = text; });
 }
 
 function triggerImport(mode) {
