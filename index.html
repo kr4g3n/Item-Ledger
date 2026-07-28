@@ -808,13 +808,35 @@ input[type="number"] {
 /* Component grid: sale-unit label cell */
 .grid-table td.comp-unit { color: var(--ink-soft); font-size: 13px; white-space: nowrap; }
 
+/* ---- Backups screen ---- */
+.backup-actions { display: flex; flex-wrap: wrap; gap: 10px; margin: 14px 0 6px; }
+.backup-actions .btn { flex: 1 1 auto; }
+.backup-indic { color: var(--ink-soft); font-size: 13px; margin: 4px 0 18px; }
+.backup-settings { background: var(--paper-dim); border: 1px solid var(--rule); border-radius: 10px; padding: 14px 16px; margin-bottom: 18px; }
+.backup-settings h3 { margin: 0 0 10px; font-size: 15px; }
+.backup-settings .field { margin-bottom: 10px; }
+.backup-list-h { font-size: 15px; margin: 6px 0 8px; }
+
+/* Toast */
+.toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%) translateY(20px);
+  background: #2b231c; color: #f4ece0; padding: 11px 18px; border-radius: 8px; font-size: 14px;
+  box-shadow: 0 6px 20px rgba(0,0,0,0.3); opacity: 0; pointer-events: none; transition: opacity .2s, transform .2s; z-index: 9999; max-width: 90vw; text-align: center; }
+.toast-show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+/* Safe-to-close overlay */
+.safe-close-overlay { position: fixed; inset: 0; background: rgba(20,16,12,0.6); display: flex; align-items: center; justify-content: center; z-index: 10000; padding: 20px; }
+.safe-close-card { background: var(--paper); border-radius: 12px; padding: 22px 24px; max-width: 380px; text-align: center; box-shadow: 0 10px 40px rgba(0,0,0,0.4); }
+.safe-close-card h2 { margin: 0 0 10px; }
+.safe-close-card p { margin: 6px 0; color: var(--ink-soft); }
+.safe-close-card .btn { margin-top: 14px; }
+
 </style>
 </head>
 <body>
 <header class="topbar">
   <div>
     <h1><span class="mark">⚖</span> The Item Ledger</h1>
-    <div class="sub">Works fully offline &middot; your data stays on this device &middot; <span style="opacity:0.45">v33</span></div>
+    <div class="sub">Works fully offline &middot; your data stays on this device &middot; <span style="opacity:0.45">v34</span></div>
   </div>
 </header>
 <div class="world-bar" id="worldBar"></div>
@@ -837,9 +859,10 @@ const SEED_DATA = {"items":[{"id":1,"name":"Firewood","categoryId":2,"isMagic":f
    schedule a background write a moment later. */
 
 const DB_NAME = 'itemLedgerDB';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 const STORE_WORLDS = 'worlds';
 const STORE_META = 'meta';
+const STORE_BACKUPS = 'backups';
 const LEGACY_LS_LIBRARY = 'itemLedgerLibrary_v2';
 const LEGACY_LS_SINGLE = 'itemLedgerData_v1';
 
@@ -862,6 +885,7 @@ function openDB() {
       const db = e.target.result;
       if (!db.objectStoreNames.contains(STORE_WORLDS)) db.createObjectStore(STORE_WORLDS, { keyPath: 'id' });
       if (!db.objectStoreNames.contains(STORE_META)) db.createObjectStore(STORE_META, { keyPath: 'key' });
+      if (!db.objectStoreNames.contains(STORE_BACKUPS)) db.createObjectStore(STORE_BACKUPS, { keyPath: 'id' });
     };
     req.onsuccess = e => resolve(e.target.result);
     req.onerror = e => reject(e.target.error);
@@ -971,6 +995,7 @@ let _savePending = false;
 function saveState() {
   // mark cache dirty handled by callers via invalidate; here we just persist
   _savePending = true;
+  markDataDirty();
   if (_saveTimer) clearTimeout(_saveTimer);
   _saveTimer = setTimeout(flushSave, 400);
 }
@@ -988,6 +1013,79 @@ async function flushSave() {
 }
 // Best-effort flush if the page is closing
 window.addEventListener('beforeunload', () => { if (_savePending) { try { /* sync best-effort */ flushSave(); } catch (e) {} } });
+
+/* ---- Backups (in-browser rolling snapshots, stored separately from worlds) ---- */
+const MAX_BACKUPS = 20;               // rolling snapshots kept in the browser
+let _dataDirtySinceBackup = false;    // set true whenever a change is saved
+function markDataDirty() { _dataDirtySinceBackup = true; }
+function isDataDirtySinceBackup() { return _dataDirtySinceBackup; }
+
+// Take a snapshot of the ACTIVE world and store it in the backups store.
+// Keeps only the most recent MAX_BACKUPS (rolling). Returns the snapshot meta.
+async function createBackupSnapshot(reason) {
+  const w = activeWorld();
+  if (!w) return null;
+  const now = new Date();
+  const snap = {
+    id: 'backup:' + now.getTime() + ':' + Math.random().toString(36).slice(2, 7),
+    createdAt: now.toISOString(),
+    worldId: w.id,
+    worldName: w.name,
+    reason: reason || 'auto',
+    itemCount: (w.data.items || []).length,
+    data: JSON.parse(JSON.stringify(w.data))
+  };
+  await idbPut(STORE_BACKUPS, snap);
+  _dataDirtySinceBackup = false;
+  await idbPut(STORE_META, { key: 'lastBackupAt', value: snap.createdAt });
+  // prune oldest beyond the cap
+  const all = await idbGetAll(STORE_BACKUPS);
+  all.sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1)); // newest first
+  for (const old of all.slice(MAX_BACKUPS)) await idbDelete(STORE_BACKUPS, old.id);
+  return { id: snap.id, createdAt: snap.createdAt, worldName: snap.worldName, itemCount: snap.itemCount, reason: snap.reason };
+}
+
+async function listBackups() {
+  const all = await idbGetAll(STORE_BACKUPS);
+  all.sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1)); // newest first
+  return all.map(s => ({ id: s.id, createdAt: s.createdAt, worldName: s.worldName, itemCount: s.itemCount, reason: s.reason }));
+}
+
+async function deleteBackup(id) { await idbDelete(STORE_BACKUPS, id); }
+
+async function getBackupData(id) {
+  const s = await idbGet(STORE_BACKUPS, id);
+  return s || null;
+}
+
+// Restore a snapshot into a NEW world (never overwrites current work).
+async function restoreBackupAsNewWorld(id) {
+  const s = await idbGet(STORE_BACKUPS, id);
+  if (!s) return null;
+  const newId = 'w' + Date.now() + Math.random().toString(36).slice(2, 6);
+  const label = (s.worldName || 'World') + ' (restored ' + new Date(s.createdAt).toLocaleString() + ')';
+  const world = { id: newId, name: label, data: JSON.parse(JSON.stringify(s.data)) };
+  library.worlds.push(world);
+  await idbPut(STORE_WORLDS, world);
+  setActiveWorldInMemory(newId);
+  await idbPut(STORE_META, { key: 'activeWorldId', value: library.activeWorldId });
+  return newId;
+}
+
+async function getLastBackupAt() {
+  const m = await idbGet(STORE_META, 'lastBackupAt');
+  return m ? m.value : null;
+}
+
+// Backup settings (interval minutes + whether interval also downloads a file)
+async function getBackupSettings() {
+  const m = await idbGet(STORE_META, 'backupSettings');
+  return Object.assign({ intervalMin: 10, autoDownload: false }, (m && m.value) || {});
+}
+async function setBackupSettings(s) {
+  await idbPut(STORE_META, { key: 'backupSettings', value: s });
+}
+
 
 /* ---- World management (async where they persist) ---- */
 async function switchWorld(worldId) {
@@ -1273,6 +1371,7 @@ function render() {
     case 'categoryGroups': renderCategoryGroupsScreen(app); break;
     case 'saleUnits': renderSaleUnitsScreen(app); break;
     case 'rarities': renderRaritiesScreen(app); break;
+    case 'backups': renderBackupsScreen(app); break;
     default: renderHome(app);
   }
   // And again after paint, in case the browser tried to restore a prior position.
@@ -1325,6 +1424,7 @@ function renderHome(app) {
         ${tile('categoryGroups', 'Category Groups', 'Optional higher tier grouping categories together', (state.categoryGroups || []).length + ' groups')}
         ${tile('saleUnits', 'Sale Units', 'Units items are sold by, and how they price', counts.saleUnits + ' units')}
         ${tile('rarities', 'Rarities', 'Rarity levels, ranked from common to mythic', (state.rarities || []).length + ' rarities')}
+        ${tile('backups', 'Backups', 'Auto-save snapshots and download backup files', '')}
       </div>
       <div class="home-foot">
         <span class="home-foot-note">Worlds are stored in this browser. Use <strong>Manage worlds</strong> (top of screen) to export a backup or move a world to another device.</span>
@@ -1904,6 +2004,98 @@ function renderSaleUnitsScreen(app) {
   app.querySelectorAll('[data-del-unit]').forEach(b => b.addEventListener('click', () => deleteUnit(Number(b.dataset.delUnit))));
 }
 
+function renderBackupsScreen(app) {
+  app.innerHTML = `
+    ${backBar('Backups')}
+    <div class="table-screen">
+      <p class="screen-note">Backups protect your catalogue. <strong>In-app snapshots</strong> live in this browser and let you undo mistakes quickly, but they are erased if you clear site data. <strong>Downloaded backup files</strong> are saved to your device and are your true off-device safety net \u2014 keep them somewhere durable.</p>
+
+      <div class="backup-actions">
+        <button class="btn btn-moss" id="bkNow">Backup now (snapshot + file)</button>
+        <button class="btn" id="bkSnap">Snapshot only</button>
+        <button class="btn btn-wax" id="bkClose">Backup &amp; close</button>
+      </div>
+      <p class="backup-indic" id="backupIndicatorLine"><span id="backupIndicator">\u2026</span></p>
+
+      <div class="backup-settings">
+        <h3>Automatic backups</h3>
+        <div class="field">
+          <label for="bkInterval">Take an in-app snapshot every</label>
+          <select id="bkInterval">
+            <option value="0">Off</option>
+            <option value="5">5 minutes</option>
+            <option value="10">10 minutes</option>
+            <option value="15">15 minutes</option>
+            <option value="30">30 minutes</option>
+          </select>
+        </div>
+        <div class="field field-checkbox">
+          <input type="checkbox" id="bkAutoDl" />
+          <label for="bkAutoDl">Also download a backup file on each auto snapshot (creates files in Downloads)</label>
+        </div>
+      </div>
+
+      <h3 class="backup-list-h">Saved snapshots</h3>
+      <div id="backupList"><p class="screen-note">Loading\u2026</p></div>
+    </div>
+  `;
+  wireBack();
+  document.getElementById('bkNow').addEventListener('click', () => backupNow(true).then(() => renderBackupList()));
+  document.getElementById('bkSnap').addEventListener('click', () => backupNow(false).then(() => renderBackupList()));
+  document.getElementById('bkClose').addEventListener('click', () => {
+    if (confirm('Download a backup file and then attempt to close the app?')) backupAndClose();
+  });
+
+  // load settings into controls
+  getBackupSettings().then(s => {
+    const iv = document.getElementById('bkInterval'); if (iv) iv.value = String(s.intervalMin);
+    const ad = document.getElementById('bkAutoDl'); if (ad) ad.checked = !!s.autoDownload;
+  });
+  document.getElementById('bkInterval').addEventListener('change', saveBackupSettingsFromUI);
+  document.getElementById('bkAutoDl').addEventListener('change', saveBackupSettingsFromUI);
+
+  updateBackupIndicator();
+  renderBackupList();
+}
+
+async function saveBackupSettingsFromUI() {
+  const intervalMin = Number(document.getElementById('bkInterval').value) || 0;
+  const autoDownload = document.getElementById('bkAutoDl').checked;
+  await setBackupSettings({ intervalMin, autoDownload });
+  scheduleAutoBackup(intervalMin, autoDownload);
+  toast('Backup settings saved');
+}
+
+async function renderBackupList() {
+  const wrap = document.getElementById('backupList');
+  if (!wrap) return;
+  const list = await listBackups();
+  if (!list.length) { wrap.innerHTML = '<p class="screen-note">No snapshots yet. They will appear here once taken.</p>'; return; }
+  wrap.innerHTML = `<table class="data-table"><thead><tr><th>When</th><th>World</th><th class="num">Items</th><th>Type</th><th></th></tr></thead><tbody>
+    ${list.map(s => `<tr>
+      <td>${escapeHtml(new Date(s.createdAt).toLocaleString())}</td>
+      <td class="dt-name">${escapeHtml(s.worldName || '')}</td>
+      <td class="num">${s.itemCount}</td>
+      <td>${s.reason === 'manual' ? 'Manual' : 'Auto'}</td>
+      <td class="dt-actions">
+        <button class="btn btn-sm" data-restore="${s.id}">Restore</button>
+        <button class="btn btn-wax btn-sm" data-delbk="${s.id}">Delete</button>
+      </td>
+    </tr>`).join('')}
+  </tbody></table>`;
+  wrap.querySelectorAll('[data-restore]').forEach(b => b.addEventListener('click', async () => {
+    if (!confirm('Restore this snapshot as a NEW world? Your current world will not be changed.')) return;
+    await restoreBackupAsNewWorld(b.dataset.restore);
+    toast('Restored as a new world');
+    render();
+  }));
+  wrap.querySelectorAll('[data-delbk]').forEach(b => b.addEventListener('click', async () => {
+    if (!confirm('Delete this snapshot?')) return;
+    await deleteBackup(b.dataset.delbk);
+    renderBackupList();
+  }));
+}
+
 function renderRaritiesScreen(app) {
   const rows = raritiesByRank();
   app.innerHTML = `
@@ -2069,6 +2261,110 @@ function exportWorld(worldId) {
   a.download = `item-ledger-${safe}-${new Date().toISOString().slice(0, 10)}.json`;
   document.body.appendChild(a); a.click(); document.body.removeChild(a);
   URL.revokeObjectURL(url);
+}
+
+// Download a dated backup file of the active world (timestamped to the minute so
+// multiple backups in a day don't overwrite each other).
+function downloadActiveWorldBackup() {
+  const w = activeWorld();
+  if (!w) return;
+  const payload = { appVersion: 2, exportedAt: new Date().toISOString(), worldName: w.name, data: w.data };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const safe = w.name.replace(/[^a-z0-9\-_]+/gi, '-').replace(/^-+|-+$/g, '').toLowerCase() || 'world';
+  const stamp = new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-');
+  a.href = url;
+  a.download = `item-ledger-${safe}-backup-${stamp}.json`;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+// "Backup now": in-browser snapshot + downloaded file, with feedback.
+async function backupNow(alsoDownload) {
+  try {
+    const snap = await createBackupSnapshot('manual');
+    if (alsoDownload !== false) downloadActiveWorldBackup();
+    updateBackupIndicator();
+    toast(alsoDownload !== false ? 'Backup saved (snapshot + file downloaded)' : 'Snapshot saved');
+    return snap;
+  } catch (e) {
+    console.error(e);
+    toast('Backup failed \u2014 see console');
+  }
+}
+
+// "Backup & close": make a file backup + snapshot, then try to close the tab.
+async function backupAndClose() {
+  try {
+    await createBackupSnapshot('manual');
+    downloadActiveWorldBackup();
+  } catch (e) { console.error(e); }
+  // Give the download a moment to start before attempting to close.
+  setTimeout(() => {
+    window.open('', '_self');
+    window.close();
+    // Many browsers refuse window.close() for tabs they didn't open; show a notice.
+    showSafeToCloseOverlay();
+  }, 600);
+}
+
+function showSafeToCloseOverlay() {
+  let el = document.getElementById('safeCloseOverlay');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'safeCloseOverlay';
+    el.className = 'safe-close-overlay';
+    el.innerHTML = '<div class="safe-close-card"><h2>Backup saved</h2><p>Your backup file has been downloaded and an in-app snapshot was taken.</p><p><strong>It is now safe to close this tab.</strong></p><button class="btn" id="safeCloseDismiss">Keep working</button></div>';
+    document.body.appendChild(el);
+    document.getElementById('safeCloseDismiss').addEventListener('click', () => el.remove());
+  }
+}
+
+// Small transient toast for feedback.
+let _toastTimer = null;
+function toast(msg) {
+  let t = document.getElementById('toast');
+  if (!t) { t = document.createElement('div'); t.id = 'toast'; t.className = 'toast'; document.body.appendChild(t); }
+  t.textContent = msg;
+  t.classList.add('toast-show');
+  if (_toastTimer) clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(() => t.classList.remove('toast-show'), 2600);
+}
+
+// ---- Auto-backup interval ----
+let _backupTimer = null;
+async function startAutoBackup() {
+  const s = await getBackupSettings();
+  scheduleAutoBackup(s.intervalMin, s.autoDownload);
+}
+function scheduleAutoBackup(intervalMin, autoDownload) {
+  if (_backupTimer) { clearInterval(_backupTimer); _backupTimer = null; }
+  const mins = Number(intervalMin) || 0;
+  if (mins <= 0) return; // 'Off'
+  _backupTimer = setInterval(async () => {
+    // only snapshot if something changed since the last backup
+    if (!isDataDirtySinceBackup()) return;
+    try {
+      await createBackupSnapshot('auto');
+      if (autoDownload) downloadActiveWorldBackup();
+      updateBackupIndicator();
+    } catch (e) { console.error('Auto-backup failed:', e); }
+  }, mins * 60 * 1000);
+}
+
+async function updateBackupIndicator() {
+  const el = document.getElementById('backupIndicator');
+  if (!el) return;
+  const last = await getLastBackupAt();
+  if (!last) { el.textContent = 'No backup yet'; return; }
+  const mins = Math.round((Date.now() - new Date(last).getTime()) / 60000);
+  let ago;
+  if (mins < 1) ago = 'just now';
+  else if (mins < 60) ago = mins + ' min ago';
+  else if (mins < 1440) ago = Math.round(mins / 60) + ' hr ago';
+  else ago = Math.round(mins / 1440) + ' day(s) ago';
+  el.textContent = 'Last backup: ' + ago;
 }
 
 function triggerImport(mode) {
@@ -3001,6 +3297,9 @@ async function boot() {
   try {
     await initStorage();
     render();
+    // Backups: take a snapshot on load, then run the auto-backup interval.
+    try { await createBackupSnapshot('load'); } catch (e) { console.error('initial snapshot failed', e); }
+    startAutoBackup();
   } catch (e) {
     console.error(e);
     appRoot.innerHTML = '<div class="empty-state">Could not open local database. If you are in a private/incognito window, try a normal window.</div>';
