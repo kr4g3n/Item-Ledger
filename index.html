@@ -833,9 +833,15 @@ input[type="number"] {
 /* World bar: two rows (world selector, then backup actions) */
 .world-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .backup-bar { display: flex; align-items: center; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
-.backup-bar-indic { color: var(--ink-faint); font-size: 12px; margin-left: auto; white-space: nowrap; }
+.backup-bar-indic { color: var(--ink-faint); font-size: 12px; white-space: nowrap; }
+/* Plain Backup on the left; indicator takes the slack; Backup & close pinned right */
+.backup-bar #barBackupCloseBtn { margin-left: auto; }
+/* Solid, high-contrast destructive-style button with white text */
+.btn-danger { background: var(--wax); color: #ffffff; border: 1px solid var(--wax); font-weight: 600; }
+.btn-danger:hover { filter: brightness(1.08); color: #ffffff; }
 @media (max-width: 480px) {
-  .backup-bar-indic { margin-left: 0; width: 100%; }
+  .backup-bar-indic { order: 3; width: 100%; margin-top: 4px; }
+  .backup-bar #barBackupCloseBtn { margin-left: auto; }
 }
 
 </style>
@@ -844,7 +850,7 @@ input[type="number"] {
 <header class="topbar">
   <div>
     <h1><span class="mark">⚖</span> The Item Ledger</h1>
-    <div class="sub">Works fully offline &middot; your data stays on this device &middot; <span style="opacity:0.45">v35</span></div>
+    <div class="sub">Works fully offline &middot; your data stays on this device &middot; <span style="opacity:0.45">v36</span></div>
   </div>
 </header>
 <div class="world-bar" id="worldBar"></div>
@@ -1406,8 +1412,8 @@ function renderTopBar() {
     </div>
     <div class="backup-bar">
       <button class="btn btn-moss btn-sm" id="barBackupBtn">Backup</button>
-      <button class="btn btn-wax btn-sm" id="barBackupCloseBtn">Backup &amp; close</button>
       <span class="backup-bar-indic" id="backupIndicator">\u2026</span>
+      <button class="btn btn-danger btn-sm" id="barBackupCloseBtn">Backup &amp; close</button>
     </div>
   `;
   document.getElementById('worldSelect').addEventListener('change', async e => {
