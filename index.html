@@ -844,13 +844,19 @@ input[type="number"] {
   .backup-bar #barBackupCloseBtn { margin-left: auto; }
 }
 
+/* Safe-to-close card: prominent Close now button */
+.safe-close-card .btn-lg { display: block; width: 100%; padding: 14px 18px; font-size: 17px; margin: 16px 0 8px; }
+.safe-close-card .btn-close-keep { display: block; width: 100%; padding: 9px; }
+.safe-close-hint { color: var(--wax); font-size: 13px; margin-top: 10px; min-height: 0; }
+.safe-close-hint:empty { display: none; }
+
 </style>
 </head>
 <body>
 <header class="topbar">
   <div>
     <h1><span class="mark">⚖</span> The Item Ledger</h1>
-    <div class="sub">Works fully offline &middot; your data stays on this device &middot; <span style="opacity:0.45">v36</span></div>
+    <div class="sub">Works fully offline &middot; your data stays on this device &middot; <span style="opacity:0.45">v37</span></div>
   </div>
 </header>
 <div class="world-bar" id="worldBar"></div>
@@ -2324,28 +2330,39 @@ async function backupAndClose() {
     await createBackupSnapshot('manual');
     downloadActiveWorldBackup();
   } catch (e) { console.error(e); }
-  // Give the download a moment to start, then attempt to close.
-  setTimeout(() => {
-    let closed = false;
-    try {
-      window.open('', '_self'); // legacy trick to allow close() in some browsers
-      window.close();
-    } catch (e) {}
-    // If we're still here shortly after, closing was blocked (normal browser tab).
-    setTimeout(() => { if (!document.hidden) showSafeToCloseOverlay(); }, 400);
-  }, 600);
+  updateBackupIndicator();
+  // Show the card with a prominent "Close now" button. window.close() is far
+  // more likely to succeed when called from a direct tap (a fresh user gesture)
+  // than from an async continuation, so we let the tap trigger the real close.
+  setTimeout(() => showSafeToCloseOverlay(), 350);
 }
 
 function showSafeToCloseOverlay() {
-  let el = document.getElementById('safeCloseOverlay');
-  if (!el) {
-    el = document.createElement('div');
-    el.id = 'safeCloseOverlay';
-    el.className = 'safe-close-overlay';
-    el.innerHTML = '<div class="safe-close-card"><h2>Backup saved</h2><p>Your backup file has been downloaded and an in-app snapshot was taken.</p><p><strong>It is now safe to close this tab.</strong></p><button class="btn" id="safeCloseDismiss">Keep working</button></div>';
-    document.body.appendChild(el);
-    document.getElementById('safeCloseDismiss').addEventListener('click', () => el.remove());
-  }
+  if (document.getElementById('safeCloseOverlay')) return;
+  const el = document.createElement('div');
+  el.id = 'safeCloseOverlay';
+  el.className = 'safe-close-overlay';
+  el.innerHTML = `<div class="safe-close-card">
+    <h2>Backup saved</h2>
+    <p>Your backup file has been downloaded and an in-app snapshot was taken.</p>
+    <button class="btn btn-danger btn-lg" id="safeCloseNow">Close now</button>
+    <button class="btn btn-ghost btn-close-keep" id="safeCloseDismiss">Keep working</button>
+    <p class="safe-close-hint" id="safeCloseHint"></p>
+  </div>`;
+  document.body.appendChild(el);
+  document.getElementById('safeCloseDismiss').addEventListener('click', () => el.remove());
+  document.getElementById('safeCloseNow').addEventListener('click', () => {
+    // Direct user gesture -> best chance the browser honours the close.
+    try { window.open('', '_self'); } catch (e) {}
+    try { window.close(); } catch (e) {}
+    // If still visible shortly after, the platform blocked it; tell the user.
+    setTimeout(() => {
+      if (!document.hidden) {
+        const hint = document.getElementById('safeCloseHint');
+        if (hint) hint.textContent = 'Your device blocked automatic closing. It is safe to close the app yourself now.';
+      }
+    }, 500);
+  });
 }
 
 // Small transient toast for feedback.
