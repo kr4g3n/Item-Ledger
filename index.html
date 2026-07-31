@@ -836,18 +836,18 @@ input[type="number"] {
 .safe-close-card p { margin: 6px 0; color: var(--ink-soft); }
 .safe-close-card .btn { margin-top: 14px; }
 
-/* World bar: two rows (world selector, then backup actions) */
+/* World bar: world selector row, then a combined actions row */
 .world-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-.backup-bar { display: flex; align-items: center; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+.action-row { display: flex; align-items: center; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
 .backup-bar-indic { color: var(--ink-faint); font-size: 12px; white-space: nowrap; }
-/* Plain Backup on the left; indicator takes the slack; Backup & close pinned right */
-.backup-bar #barBackupCloseBtn { margin-left: auto; }
+/* Backup & close pinned to the far right, away from the plain Backup button */
+.action-row #barBackupCloseBtn { margin-left: auto; }
 /* Solid, high-contrast destructive-style button with white text */
 .btn-danger { background: var(--wax); color: #ffffff; border: 1px solid var(--wax); font-weight: 600; }
 .btn-danger:hover { filter: brightness(1.08); color: #ffffff; }
 @media (max-width: 480px) {
   .backup-bar-indic { order: 3; width: 100%; margin-top: 4px; }
-  .backup-bar #barBackupCloseBtn { margin-left: auto; }
+  .action-row #barBackupCloseBtn { margin-left: auto; }
 }
 
 /* Safe-to-close card: prominent Close now button */
@@ -862,7 +862,7 @@ input[type="number"] {
 <header class="topbar">
   <div>
     <h1><span class="mark">⚖</span> The Item Ledger</h1>
-    <div class="sub">Works fully offline &middot; your data stays on this device &middot; <span style="opacity:0.45">v39</span></div>
+    <div class="sub">Works fully offline &middot; your data stays on this device &middot; <span style="opacity:0.45">v40</span></div>
   </div>
 </header>
 <div class="world-bar" id="worldBar"></div>
@@ -1422,9 +1422,9 @@ function renderTopBar() {
       ${showHome ? '<button class="btn btn-ghost btn-sm" id="barHomeBtn">\u2190 Home</button>' : ''}
       <label class="world-label">World</label>
       <select id="worldSelect">${opts}</select>
-      <button class="btn btn-ghost btn-sm" id="worldManageBtn">Manage worlds\u2026</button>
     </div>
-    <div class="backup-bar">
+    <div class="action-row">
+      <button class="btn btn-ghost btn-sm" id="worldManageBtn">Manage worlds\u2026</button>
       <button class="btn btn-moss btn-sm" id="barBackupBtn">Backup</button>
       <span class="backup-bar-indic" id="backupIndicator">\u2026</span>
       <button class="btn btn-danger btn-sm" id="barBackupCloseBtn">Backup &amp; close</button>
@@ -1465,9 +1465,6 @@ function renderHome(app) {
   };
   app.innerHTML = `
     <div class="home-wrap">
-      <div class="home-head">
-        <h2>${escapeHtml(aw.name)}</h2>
-      </div>
       <div class="tile-grid">
         ${tile('catalogue', 'Item Catalogue', 'Create and price items, components and labour', counts.items + ' items')}
         ${tile('professions', 'Professions', 'Trades and the skill level each one works at', counts.professions + ' professions')}
