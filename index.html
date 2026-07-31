@@ -84,6 +84,9 @@ input[type="number"] {
   border-bottom: 3px double var(--brass);
   flex-wrap: wrap;
   gap: 10px;
+  position: sticky;
+  top: 0;
+  z-index: 60;
 }
 
 .topbar h1 {
@@ -436,6 +439,9 @@ input[type="number"] {
   padding: 8px 20px;
   background: #241d17;
   border-bottom: 1px solid #3a3026;
+  position: sticky;
+  top: var(--topbar-h, 64px);
+  z-index: 55;
 }
 .world-bar .world-label {
   font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: #b3a888;
@@ -856,7 +862,7 @@ input[type="number"] {
 <header class="topbar">
   <div>
     <h1><span class="mark">⚖</span> The Item Ledger</h1>
-    <div class="sub">Works fully offline &middot; your data stays on this device &middot; <span style="opacity:0.45">v38</span></div>
+    <div class="sub">Works fully offline &middot; your data stays on this device &middot; <span style="opacity:0.45">v39</span></div>
   </div>
 </header>
 <div class="world-bar" id="worldBar"></div>
@@ -1410,8 +1416,10 @@ function renderTopBar() {
   const opts = library.worlds.map(w =>
     `<option value="${w.id}" ${w.id === library.activeWorldId ? 'selected' : ''}>${escapeHtml(w.name)}</option>`
   ).join('');
+  const showHome = currentScreen && currentScreen !== 'home';
   bar.innerHTML = `
     <div class="world-row">
+      ${showHome ? '<button class="btn btn-ghost btn-sm" id="barHomeBtn">\u2190 Home</button>' : ''}
       <label class="world-label">World</label>
       <select id="worldSelect">${opts}</select>
       <button class="btn btn-ghost btn-sm" id="worldManageBtn">Manage worlds\u2026</button>
@@ -1422,6 +1430,8 @@ function renderTopBar() {
       <button class="btn btn-danger btn-sm" id="barBackupCloseBtn">Backup &amp; close</button>
     </div>
   `;
+  const homeBtn = document.getElementById('barHomeBtn');
+  if (homeBtn) homeBtn.addEventListener('click', () => navigate('home'));
   document.getElementById('worldSelect').addEventListener('change', async e => {
     await switchWorld(e.target.value);
     render();
@@ -1432,6 +1442,17 @@ function renderTopBar() {
     if (confirm('Download a backup file and then close the app?')) backupAndClose();
   });
   updateBackupIndicator();
+  syncTopbarHeight();
+}
+
+// Keep the world-bar's sticky offset equal to the (variable) topbar height.
+function syncTopbarHeight() {
+  const tb = document.querySelector('.topbar');
+  if (!tb) return;
+  document.documentElement.style.setProperty('--topbar-h', tb.offsetHeight + 'px');
+}
+if (typeof window !== 'undefined') {
+  window.addEventListener('resize', () => { try { syncTopbarHeight(); } catch (e) {} });
 }
 
 /* ===================== Home screen ===================== */
@@ -1446,7 +1467,6 @@ function renderHome(app) {
     <div class="home-wrap">
       <div class="home-head">
         <h2>${escapeHtml(aw.name)}</h2>
-        <p class="home-sub">Choose a register to work in. Everything below belongs to this world.</p>
       </div>
       <div class="tile-grid">
         ${tile('catalogue', 'Item Catalogue', 'Create and price items, components and labour', counts.items + ' items')}
@@ -1476,7 +1496,6 @@ function tile(screen, title, desc, stat) {
 
 function backBar(title) {
   return `<div class="screen-head">
-      <button class="btn btn-ghost btn-sm" id="backHomeBtn">\u2190 Home</button>
       <h2>${escapeHtml(title)}</h2>
     </div>`;
 }
