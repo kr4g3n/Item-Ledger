@@ -856,7 +856,7 @@ input[type="number"] {
 <header class="topbar">
   <div>
     <h1><span class="mark">⚖</span> The Item Ledger</h1>
-    <div class="sub">Works fully offline &middot; your data stays on this device &middot; <span style="opacity:0.45">v37</span></div>
+    <div class="sub">Works fully offline &middot; your data stays on this device &middot; <span style="opacity:0.45">v38</span></div>
   </div>
 </header>
 <div class="world-bar" id="worldBar"></div>
@@ -1592,13 +1592,7 @@ function renderItemList() {
   const renderCatBlock = (catId, indented) => {
     const cat = catsById.get(catId);
     const catName = cat ? cat.name : 'Uncategorised';
-    const items = (itemsByCat.get(catId) || []).slice().sort((a, b) => {
-      const ra = getRarity(a.rarityId), rb = getRarity(b.rarityId);
-      const rankA = ra ? (ra.rank || 0) : Infinity;   // items with no rarity sort last
-      const rankB = rb ? (rb.rank || 0) : Infinity;
-      if (rankA !== rankB) return rankA - rankB;
-      return a.name.localeCompare(b.name);
-    });
+    const items = (itemsByCat.get(catId) || []).slice().sort((a, b) => a.name.localeCompare(b.name));
     const catKey = 'cat:' + catId;
     const isCollapsed = !searching && collapsedCategories.has(catKey);
     html += `<tr class="list-cat-row"><td colspan="4">
@@ -2593,6 +2587,129 @@ function computeDraftResult() {
   return { result, compUnitValues, compUnitWeights };
 }
 
+// Assemble a clean, readable text summary of the current draft item for pasting.
+function buildItemText() {
+  const d = draftItem;
+  if (!d) return '';
+  const { result, compUnitValues, compUnitWeights } = computeDraftResult();
+  const cat = d.categoryId != null ? getCategory(d.categoryId) : null;
+  const rar = d.rarityId != null ? getRarity(d.rarityId) : null;
+  const su = d.saleUnitId != null ? getSaleUnit(d.saleUnitId) : null;
+  const nl = '\n';
+  let t = '';
+  t += (d.name || '(unnamed item)') + nl;
+  t += '='.repeat((d.name || '(unnamed item)').length) + nl + nl;
+
+  // Meta line
+  const meta = [];
+  if (cat) meta.push('Category: ' + cat.name);
+  if (rar) meta.push('Rarity: ' + rar.name);
+  if (d.isMagic) meta.push('Magic item');
+  if (meta.length) t += meta.join('  |  ') + nl + nl;
+
+  // Description
+  if (d.description && d.description.trim()) {
+    t += 'DESCRIPTION' + nl + d.description.trim() + nl + nl;
+  }
+
+  // Components
+  const comps = d._components || [];
+  t += 'COMPONENTS (' + comps.length + ')' + nl;
+  if (!comps.length) {
+    t += '  None' + nl;
+  } else {
+    comps.forEach(c => {
+      const ci = getItem(c.componentItemId);
+      const csu = ci ? getSaleUnit(ci.saleUnitId) : null;
+      const qty = Number(c.quantity) || 0;
+      const unitWord = csu ? (qty === 1 ? csu.name : (csu.namePlural || csu.name)) : '';
+      const lineCost = qty * (compUnitValues.get(c.componentItemId) || 0);
+      const lineWt = qty * (compUnitWeights.get(c.componentItemId) || 0);
+      t += '  - ' + (ci ? ci.name : 'Unknown') + ': ' + fmtNum(qty) + (unitWord ? ' ' + unitWord : '') +
+           '  (' + fmtCurrency(lineCost) + ', ' + fmtNum(lineWt) + ' lbs)' + nl;
+    });
+  }
+  t += nl;
+
+  // Labour
+  const labs = d._professions || [];
+  t += 'LABOUR (' + labs.length + ')' + nl;
+  if (!labs.length) {
+    t += '  None' + nl;
+  } else {
+    labs.forEach(lp => {
+      const p = getProfession(lp.professionId);
+      const sk = p ? getSkillLevel(p.skillLevelId) : null;
+      t += '  - ' + (p ? p.name : 'Unknown') + ': ' + fmtNum(lp.numWorkers) + ' worker(s), ' +
+           fmtNum(lp.craftingDays) + ' day(s)' + (sk ? ', ' + sk.name : '') +
+           (sk ? ' @ ' + fmtCurrency2(sk.dayRate) + '/day' : '') + nl;
+    });
+  }
+  t += nl;
+
+  // Costs
+  t += 'COSTS' + nl;
+  t += '  Components total: ' + fmtCurrency(result.materialsTotal || 0) + nl;
+  t += '  Labour total:     ' + fmtCurrency(result.labourTotal || 0) + nl;
+  t += '  Total cost:       ' + fmtCurrency(result.totalCost || 0) + nl;
+  if ((d.markupAmount || 0) !== 0) t += '  Markup:           ' + fmtCurrency(d.markupAmount || 0) + nl;
+  t += '  Item value:       ' + fmtCurrency(result.itemValue || 0) + nl + nl;
+
+  // Sale / physical
+  t += 'SALE & WEIGHT' + nl;
+  t += '  Item weight:         ' + fmtNum(d.weightLbs || 0) + ' lbs' + nl;
+  t += '  Units produced:      ' + fmtNum(d.baseMeasureQty || 0) + nl;
+  t += '  Sale unit:           ' + (su ? su.name : '\u2014') + nl;
+  t += '  Minimum sale qty:    ' + fmtNum(d.minSaleQty || 0) + nl;
+  t += '  Catalogue value:     ' + fmtCurrency(result.catalogueValue || 0) + ' per ' + (su ? su.name : 'unit') +
+       (Number(d.minSaleQty) !== 1 ? ' lot (min ' + fmtNum(d.minSaleQty) + ')' : '') + nl;
+  t += '  Catalogue weight:    ' + fmtNum(result.catalogueWeight || 0) + ' lbs' + nl;
+
+  // Crafting description
+  if (d.craftingDescription && d.craftingDescription.trim()) {
+    t += nl + 'CRAFTING DESCRIPTION' + nl + d.craftingDescription.trim() + nl;
+  }
+
+  return t;
+}
+
+async function copyItemAsText() {
+  const text = buildItemText();
+  let ok = false;
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      await navigator.clipboard.writeText(text);
+      ok = true;
+    }
+  } catch (e) { ok = false; }
+  if (!ok) {
+    // Fallback: temporary textarea + execCommand for older/permission-restricted contexts
+    try {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed'; ta.style.left = '-9999px';
+      document.body.appendChild(ta);
+      ta.focus(); ta.select();
+      ok = document.execCommand('copy');
+      document.body.removeChild(ta);
+    } catch (e) { ok = false; }
+  }
+  if (ok) {
+    toast('Item details copied to clipboard');
+  } else {
+    // Last resort: show the text in a dialog so it can be copied manually
+    showItemTextDialog(text);
+  }
+}
+
+function showItemTextDialog(text) {
+  openDialog('Item details (copy manually)', `
+    <p class="dlg-hint">Automatic copy was blocked. Select all and copy the text below.</p>
+    <textarea id="itemTextArea" rows="16" style="width:100%; font-family:monospace; font-size:12px;">${escapeHtml(text)}</textarea>
+  `, null, { wide: true, hideSave: true });
+  setTimeout(() => { const ta = document.getElementById('itemTextArea'); if (ta) { ta.focus(); ta.select(); } }, 50);
+}
+
 function renderEditorPage(app) {
   if (!draftItem) { navigate('catalogue'); return; }
   const item = draftItem;
@@ -2612,6 +2729,7 @@ function renderEditorPage(app) {
       <button class="btn btn-ghost btn-sm" id="editorBackBtn">\u2190 List</button>
       <h2>${draftIsNew ? 'Add item' : 'Edit item'}</h2>
       <div class="editor-head-actions">
+        <button class="btn btn-ghost btn-sm" id="editorCopyBtn" title="Copy this item's details as text">Copy as text</button>
         <button class="btn" id="editorCancelBtn">Cancel</button>
         <button class="btn btn-brass" id="editorSaveBtn">Save item</button>
       </div>
@@ -2679,6 +2797,7 @@ function renderEditorPage(app) {
   document.getElementById('editorCancelBtnBottom').addEventListener('click', cancelEditor);
   document.getElementById('editorSaveBtnBottom').addEventListener('click', saveDraft);
   document.getElementById('editorSaveBtn').addEventListener('click', saveDraft);
+  document.getElementById('editorCopyBtn').addEventListener('click', copyItemAsText);
 
   document.getElementById('itemNameInput').addEventListener('input', e => { item.name = e.target.value; updateEditorSaveState(); });
   document.getElementById('f-category').addEventListener('change', e => {
