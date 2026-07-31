@@ -856,13 +856,37 @@ input[type="number"] {
 .safe-close-hint { color: var(--wax); font-size: 13px; margin-top: 10px; min-height: 0; }
 .safe-close-hint:empty { display: none; }
 
+/* ---- Table screens: sticky add button + sticky table header, body scrolls ---- */
+.table-screen {
+  max-width: 920px; margin: 0 auto; padding: 0;
+  display: flex; flex-direction: column;
+  height: calc(100vh - var(--topbar-h, 64px) - var(--worldbar-h, 90px));
+  min-height: 0;
+}
+.table-actions {
+  position: sticky; top: 0; z-index: 6;
+  background: var(--paper);
+  padding: 14px 24px 10px;
+  border-bottom: 1px solid var(--rule-light);
+}
+.table-scroll {
+  flex: 1; min-height: 0; overflow-y: auto;
+  padding: 0 24px 24px;
+}
+/* Table header sticks to the top of the scroll container */
+.table-scroll .data-table thead th { position: sticky; top: 0; z-index: 4; }
+.table-scroll .data-table { margin-top: 0; }
+/* Backups screen keeps its notes flowing (not a pure data screen) */
+.backups-flow .table-screen { height: auto; display: block; }
+.table-screen.backups-screen { height: auto; display: block; padding: 22px 24px 60px; }
+
 </style>
 </head>
 <body>
 <header class="topbar">
   <div>
     <h1><span class="mark">⚖</span> The Item Ledger</h1>
-    <div class="sub">Works fully offline &middot; your data stays on this device &middot; <span style="opacity:0.45">v40</span></div>
+    <div class="sub">Works fully offline &middot; your data stays on this device &middot; <span style="opacity:0.45">v41</span></div>
   </div>
 </header>
 <div class="world-bar" id="worldBar"></div>
@@ -1408,6 +1432,8 @@ function render() {
       if (main) main.scrollTop = 0;
     });
   }
+  // Keep sticky offsets / table-screen heights correct after layout settles.
+  requestAnimationFrame(() => { try { syncTopbarHeight(); } catch (e) {} });
 }
 
 /* ===================== Top bar + world selector ===================== */
@@ -1445,11 +1471,12 @@ function renderTopBar() {
   syncTopbarHeight();
 }
 
-// Keep the world-bar's sticky offset equal to the (variable) topbar height.
+// Keep sticky offsets in sync with the (variable) fixed header heights.
 function syncTopbarHeight() {
   const tb = document.querySelector('.topbar');
-  if (!tb) return;
-  document.documentElement.style.setProperty('--topbar-h', tb.offsetHeight + 'px');
+  const wb = document.querySelector('.world-bar');
+  if (tb) document.documentElement.style.setProperty('--topbar-h', tb.offsetHeight + 'px');
+  if (wb) document.documentElement.style.setProperty('--worldbar-h', wb.offsetHeight + 'px');
 }
 if (typeof window !== 'undefined') {
   window.addEventListener('resize', () => { try { syncTopbarHeight(); } catch (e) {} });
@@ -1467,16 +1494,13 @@ function renderHome(app) {
     <div class="home-wrap">
       <div class="tile-grid">
         ${tile('catalogue', 'Item Catalogue', 'Create and price items, components and labour', counts.items + ' items')}
-        ${tile('professions', 'Professions', 'Trades and the skill level each one works at', counts.professions + ' professions')}
-        ${tile('skillLevels', 'Skill Levels', 'Day rates that drive every labour cost', counts.skillLevels + ' levels')}
-        ${tile('categories', 'Categories', 'How items are grouped in the catalogue', counts.categories + ' categories')}
-        ${tile('categoryGroups', 'Category Groups', 'Optional higher tier grouping categories together', (state.categoryGroups || []).length + ' groups')}
-        ${tile('saleUnits', 'Sale Units', 'Units items are sold by, and how they price', counts.saleUnits + ' units')}
-        ${tile('rarities', 'Rarities', 'Rarity levels, ranked from common to mythic', (state.rarities || []).length + ' rarities')}
-        ${tile('backups', 'Backups', 'Auto-save snapshots and download backup files', '')}
-      </div>
-      <div class="home-foot">
-        <span class="home-foot-note">Worlds are stored in this browser. Use <strong>Manage worlds</strong> (top of screen) to export a backup or move a world to another device.</span>
+        ${tile('professions', 'Professions', 'A profession names a trade and ties it to a skill level. The skill level\u2019s day rate is what feeds into labour costs.', counts.professions + ' professions')}
+        ${tile('skillLevels', 'Skill Levels', 'A skill level\u2019s day rate flows into every profession that uses it, and from there into item labour costs. Changing a rate re-prices everything that depends on it.', counts.skillLevels + ' levels')}
+        ${tile('categories', 'Categories', 'Categories group items in the catalogue. Each category can optionally sit under a higher-level Category Group.', counts.categories + ' categories')}
+        ${tile('categoryGroups', 'Category Groups', 'An optional higher tier that bundles related categories together (e.g. a \u201cFood & Drink\u201d group containing Beverages, Meat and Provisions). Categories not assigned to a group appear on their own.', (state.categoryGroups || []).length + ' groups')}
+        ${tile('saleUnits', 'Sale Units', 'A sale unit\u2019s type (weight, count or measure) decides how an item\u2019s catalogue price per unit is worked out.', counts.saleUnits + ' units')}
+        ${tile('rarities', 'Rarities', 'Rarity levels, ranked from common to mythic. Set a rarity on each item; manage the ladder here.', (state.rarities || []).length + ' rarities')}
+        ${tile('backups', 'Backups', 'In-app snapshots undo mistakes quickly (erased if you clear site data); downloaded backup files are your true off-device safety net.', '')}
       </div>
     </div>
   `;
@@ -1492,9 +1516,7 @@ function tile(screen, title, desc, stat) {
 }
 
 function backBar(title) {
-  return `<div class="screen-head">
-      <h2>${escapeHtml(title)}</h2>
-    </div>`;
+  return '';
 }
 function wireBack() {
   const b = document.getElementById('backHomeBtn');
@@ -1741,8 +1763,8 @@ function renderProfessionsScreen(app) {
   app.innerHTML = `
     ${backBar('Professions')}
     <div class="table-screen">
-      <p class="screen-note">A profession names a trade and ties it to a skill level. The skill level's day rate is what feeds into labour costs.</p>
-      <table class="data-table">
+      <div class="table-actions"><button class="btn btn-moss" id="addProfBtn">+ Add profession</button></div>
+      <div class="table-scroll"><table class="data-table">
         <thead><tr><th>Profession</th><th>Skill level</th><th class="num">Used by</th><th></th></tr></thead>
         <tbody>
           ${rows.map(p => {
@@ -1758,8 +1780,7 @@ function renderProfessionsScreen(app) {
             </tr>`;
           }).join('')}
         </tbody>
-      </table>
-      <button class="btn btn-moss" id="addProfBtn">+ Add profession</button>
+      </table></div>
     </div>
   `;
   wireBack();
@@ -1807,8 +1828,8 @@ function renderSkillLevelsScreen(app) {
   app.innerHTML = `
     ${backBar('Skill Levels')}
     <div class="table-screen">
-      <p class="screen-note">A skill level's day rate flows into every profession that uses it, and from there into item labour costs. Changing a rate re-prices everything that depends on it.</p>
-      <table class="data-table">
+      <div class="table-actions"><button class="btn btn-moss" id="addSkillBtn">+ Add skill level</button></div>
+      <div class="table-scroll"><table class="data-table">
         <thead><tr><th>Skill level</th><th class="num">Day rate</th><th class="num">Professions</th><th></th></tr></thead>
         <tbody>
           ${rows.map(s => {
@@ -1824,8 +1845,7 @@ function renderSkillLevelsScreen(app) {
             </tr>`;
           }).join('')}
         </tbody>
-      </table>
-      <button class="btn btn-moss" id="addSkillBtn">+ Add skill level</button>
+      </table></div>
     </div>
   `;
   wireBack();
@@ -1870,8 +1890,8 @@ function renderCategoriesScreen(app) {
   app.innerHTML = `
     ${backBar('Categories')}
     <div class="table-screen">
-      <p class="screen-note">Categories group items in the catalogue. Each category can optionally sit under a higher-level Category Group.</p>
-      <table class="data-table">
+      <div class="table-actions"><button class="btn btn-moss" id="addCatBtn">+ Add category</button></div>
+      <div class="table-scroll"><table class="data-table">
         <thead><tr><th>Category</th><th>Group</th><th class="num">Items</th><th></th></tr></thead>
         <tbody>
           ${rows.map(c => {
@@ -1887,8 +1907,7 @@ function renderCategoriesScreen(app) {
             </tr>`;
           }).join('')}
         </tbody>
-      </table>
-      <button class="btn btn-moss" id="addCatBtn">+ Add category</button>
+      </table></div>
     </div>
   `;
   wireBack();
@@ -1959,8 +1978,8 @@ function renderCategoryGroupsScreen(app) {
   app.innerHTML = `
     ${backBar('Category Groups')}
     <div class="table-screen">
-      <p class="screen-note">Category Groups are an optional higher tier that bundle related categories together (for example, a \u201cFood &amp; Drink\u201d group containing Beverages, Meat and Provisions). Categories not assigned to a group simply appear on their own.</p>
-      <table class="data-table">
+      <div class="table-actions"><button class="btn btn-moss" id="addGroupBtn">+ Add group</button></div>
+      <div class="table-scroll"><table class="data-table">
         <thead><tr><th>Group</th><th class="num">Categories</th><th></th></tr></thead>
         <tbody>
           ${rows.length ? rows.map(g => {
@@ -1975,8 +1994,7 @@ function renderCategoryGroupsScreen(app) {
             </tr>`;
           }).join('') : '<tr><td colspan="3" style="color:var(--ink-faint);font-style:italic;">No groups yet.</td></tr>'}
         </tbody>
-      </table>
-      <button class="btn btn-moss" id="addGroupBtn">+ Add group</button>
+      </table></div>
     </div>
   `;
   wireBack();
@@ -2019,8 +2037,8 @@ function renderSaleUnitsScreen(app) {
   app.innerHTML = `
     ${backBar('Sale Units')}
     <div class="table-screen">
-      <p class="screen-note">A sale unit's type (weight, count or measure) decides how an item's catalogue price per unit is worked out.</p>
-      <table class="data-table">
+      <div class="table-actions"><button class="btn btn-moss" id="addUnitBtn">+ Add sale unit</button></div>
+      <div class="table-scroll"><table class="data-table">
         <thead><tr><th>Sale unit</th><th>Type</th><th class="num">Items</th><th></th></tr></thead>
         <tbody>
           ${rows.map(u => {
@@ -2036,8 +2054,7 @@ function renderSaleUnitsScreen(app) {
             </tr>`;
           }).join('')}
         </tbody>
-      </table>
-      <button class="btn btn-moss" id="addUnitBtn">+ Add sale unit</button>
+      </table></div>
     </div>
   `;
   wireBack();
@@ -2049,7 +2066,7 @@ function renderSaleUnitsScreen(app) {
 function renderBackupsScreen(app) {
   app.innerHTML = `
     ${backBar('Backups')}
-    <div class="table-screen">
+    <div class="table-screen backups-screen">
       <p class="screen-note">Backups protect your catalogue. <strong>In-app snapshots</strong> live in this browser and let you undo mistakes quickly, but they are erased if you clear site data. <strong>Downloaded backup files</strong> are saved to your device and are your true off-device safety net \u2014 keep them somewhere durable.</p>
 
       <div class="backup-actions">
@@ -2139,8 +2156,8 @@ function renderRaritiesScreen(app) {
   app.innerHTML = `
     ${backBar('Rarities')}
     <div class="table-screen">
-      <p class="screen-note">Rarity levels are ordered by their <strong>rarity value</strong> (1 = lowest / most common). The value is the sort key, so you can insert new levels between existing ones later. Items sort by rarity within each category.</p>
-      <table class="data-table">
+      <div class="table-actions"><button class="btn btn-moss" id="addRarityBtn">+ Add rarity</button></div>
+      <div class="table-scroll"><table class="data-table">
         <thead><tr><th class="num">Value</th><th>Rarity</th><th>Description</th><th class="num">Items</th><th></th></tr></thead>
         <tbody>
           ${rows.map(r => {
@@ -2157,8 +2174,7 @@ function renderRaritiesScreen(app) {
             </tr>`;
           }).join('')}
         </tbody>
-      </table>
-      <button class="btn btn-moss" id="addRarityBtn">+ Add rarity</button>
+      </table></div>
     </div>
   `;
   wireBack();
