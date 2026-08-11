@@ -897,7 +897,7 @@ input[type="number"] {
 <header class="topbar">
   <div>
     <h1><span class="mark">⚖</span> The Item Ledger</h1>
-    <div class="sub">Works fully offline &middot; your data stays on this device &middot; <span style="opacity:0.45">v48</span></div>
+    <div class="sub">Works fully offline &middot; your data stays on this device &middot; <span style="opacity:0.45">v49</span></div>
   </div>
 </header>
 <div class="world-bar" id="worldBar"></div>
@@ -1270,10 +1270,14 @@ function computeItem(itemId, cache, visiting) {
   const unitType = su ? (su.type || '').toLowerCase() : '';
   const weight = item.weightLbs || 0;
   // Gross weight = net + container/packaging. Display-only, never enters cost or
-  // component-weight maths. Source of gross:
-  //   - packaging section present -> gross = net + packaging weight (computed)
+  // component-weight maths. The item's TOTAL gross:
+  //   - packaging section present -> net total + packaging weight total
   //   - otherwise -> manual grossWeightLbs, or net when unset.
-  const manualGross = (item.grossWeightLbs != null && item.grossWeightLbs !== '') ? (item.grossWeightLbs || 0) : weight;
+  // This total is then scaled to per-lot exactly like net weight, so packaging
+  // that covers a whole batch is divided across the batch's sale units.
+  const grossTotal = hasPackaging
+    ? (weight + packagingWeight)
+    : ((item.grossWeightLbs != null && item.grossWeightLbs !== '') ? (item.grossWeightLbs || 0) : weight);
   const minQty = item.minSaleQty || 0;
   const baseQty = item.baseMeasureQty || 0;
 
@@ -1281,16 +1285,11 @@ function computeItem(itemId, cache, visiting) {
   if (unitType === 'weight') {
     catalogueWeight = minQty;
     catalogueValue = weight === 0 ? 0 : itemValue * (minQty / weight);
-    catalogueGrossWeight = weight === 0 ? minQty : minQty * (manualGross / weight);
+    catalogueGrossWeight = weight === 0 ? minQty : minQty * (grossTotal / weight);
   } else if (unitType === 'count' || unitType === 'measure') {
     catalogueWeight = baseQty === 0 ? 0 : weight * (minQty / baseQty);
     catalogueValue = baseQty === 0 ? 0 : itemValue * (minQty / baseQty);
-    catalogueGrossWeight = baseQty === 0 ? 0 : manualGross * (minQty / baseQty);
-  }
-  // Packaging weight is added FLAT to the per-lot gross (no sale-unit scaling),
-  // overriding the manual gross when the packaging section is in use.
-  if (hasPackaging) {
-    catalogueGrossWeight = catalogueWeight + packagingWeight;
+    catalogueGrossWeight = baseQty === 0 ? 0 : grossTotal * (minQty / baseQty);
   }
   // Round to 4dp so the displayed per-unit value is exactly what gets used
   // when this item is a component elsewhere (values always reconcile by hand).
