@@ -897,7 +897,7 @@ input[type="number"] {
 <header class="topbar">
   <div>
     <h1><span class="mark">⚖</span> The Item Ledger</h1>
-    <div class="sub">Works fully offline &middot; your data stays on this device &middot; <span style="opacity:0.45">v49</span></div>
+    <div class="sub">Works fully offline &middot; your data stays on this device &middot; <span style="opacity:0.45">v50</span></div>
   </div>
 </header>
 <div class="world-bar" id="worldBar"></div>
@@ -2985,6 +2985,8 @@ function renderEditorPage(app) {
       if (bq) bq.value = item.baseMeasureQty.toFixed(2);
     }
     updateDraftTotals();
+    // Keep the computed gross field (net + packaging) in step with net.
+    syncGrossFieldFromPackaging();
   });
   document.getElementById('f-grossweight').addEventListener('input', e => {
     const v = e.target.value.trim();
