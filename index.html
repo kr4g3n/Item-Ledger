@@ -885,13 +885,19 @@ input[type="number"] {
 .backups-flow .table-screen { height: auto; display: block; }
 .table-screen.backups-screen { height: auto; display: block; padding: 22px 24px 60px; }
 
+/* Ledger weight column: gross on top, net beneath in smaller muted text */
+.lr-weight-net { display: block; font-size: 11px; color: var(--ink-faint); font-weight: normal; margin-top: 1px; }
+
+/* Packaging panel note */
+.panel-note { color: var(--ink-faint); font-size: 12px; line-height: 1.45; margin: 0 0 8px; }
+
 </style>
 </head>
 <body>
 <header class="topbar">
   <div>
     <h1><span class="mark">⚖</span> The Item Ledger</h1>
-    <div class="sub">Works fully offline &middot; your data stays on this device &middot; <span style="opacity:0.45">v44</span></div>
+    <div class="sub">Works fully offline &middot; your data stays on this device &middot; <span style="opacity:0.45">v46</span></div>
   </div>
 </header>
 <div class="world-bar" id="worldBar"></div>
@@ -927,7 +933,7 @@ let state = null;
 let currentItemId = null;
 
 function blankWorldData() {
-  return { items: [], components: [], professions: [], skillLevels: [], categories: [], saleUnits: [], itemProfessions: [], categoryGroups: [], rarities: [] };
+  return { items: [], components: [], packaging: [], professions: [], skillLevels: [], categories: [], saleUnits: [], itemProfessions: [], categoryGroups: [], rarities: [] };
 }
 function makeWorld(name, data) {
   return { id: 'w' + Date.now() + Math.floor(Math.random() * 100000), name: name, data: data };
@@ -1189,6 +1195,7 @@ function getRarity(id) { return (state.rarities || []).find(r => r.id === id); }
 // Rarities sorted by rank (ascending), for dropdowns and the editor list.
 function raritiesByRank() { return (state.rarities || []).slice().sort((a, b) => (a.rank || 0) - (b.rank || 0) || a.name.localeCompare(b.name)); }
 function componentsOf(itemId) { return state.components.filter(c => c.parentItemId === itemId); }
+function packagingOf(itemId) { return (state.packaging || []).filter(p => p.parentItemId === itemId); }
 function professionsOf(itemId) { return state.itemProfessions.filter(ip => ip.itemId === itemId); }
 function usedAsComponentElsewhere(itemId) { return state.components.filter(c => c.componentItemId === itemId); }
 function nextId(arr) { return arr.reduce((m, x) => Math.max(m, x.id), 0) + 1; }
@@ -1203,7 +1210,7 @@ function nextId(arr) { return arr.reduce((m, x) => Math.max(m, x.id), 0) + 1; }
 let calcResultCache = new Map();
 
 function computeItem(itemId, cache, visiting) {
-  const empty = { materialsTotal: 0, labourTotal: 0, totalCost: 0, itemValue: 0, catalogueValue: 0, catalogueWeight: 0, circular: false };
+  const empty = { materialsTotal: 0, labourTotal: 0, packagingTotal: 0, packagingWeight: 0, hasPackaging: false, totalCost: 0, itemValue: 0, catalogueValue: 0, catalogueWeight: 0, catalogueGrossWeight: 0, circular: false };
   if (visiting.has(itemId)) return { ...empty, circular: true };
   const item = getItem(itemId);
   if (!item) return empty;
@@ -1233,28 +1240,58 @@ function computeItem(itemId, cache, visiting) {
     materialsTotal += (c.quantity || 0) * perUnitValue;
   }
 
-  const totalCost = materialsTotal + labourTotal;
+  // Packaging/containers: priced like components (adds to cost), and each line's
+  // (quantity x container NET weight per unit) adds to this item's GROSS weight
+  // only. Never affects net weight or any component-weight maths.
+  let packagingTotal = 0;
+  let packagingWeight = 0;
+  for (const p of packagingOf(itemId)) {
+    let contResult = cache.get(p.containerItemId);
+    if (!contResult) contResult = computeItem(p.containerItemId, cache, visiting);
+    if (contResult.circular) anyCircular = true;
+    const contItem = getItem(p.containerItemId);
+    const contMinQty = contItem && (contItem.minSaleQty || 0) > 0 ? contItem.minSaleQty : 1;
+    const perUnitValue = (contResult.catalogueValue || 0) / contMinQty;
+    const perUnitNetWeight = (contResult.catalogueWeight || 0) / contMinQty; // container's own NET weight
+    packagingTotal += (p.quantity || 0) * perUnitValue;
+    packagingWeight += (p.quantity || 0) * perUnitNetWeight;
+  }
+  const hasPackaging = packagingOf(itemId).length > 0;
+
+  const totalCost = materialsTotal + labourTotal + packagingTotal;
   const itemValue = round5(totalCost + (item.markupAmount || 0));
 
   const su = getSaleUnit(item.saleUnitId);
   const unitType = su ? (su.type || '').toLowerCase() : '';
   const weight = item.weightLbs || 0;
+  // Gross weight = net + container/packaging. Display-only, never enters cost or
+  // component-weight maths. Source of gross:
+  //   - packaging section present -> gross = net + packaging weight (computed)
+  //   - otherwise -> manual grossWeightLbs, or net when unset.
+  const manualGross = (item.grossWeightLbs != null && item.grossWeightLbs !== '') ? (item.grossWeightLbs || 0) : weight;
   const minQty = item.minSaleQty || 0;
   const baseQty = item.baseMeasureQty || 0;
 
-  let catalogueValue = 0, catalogueWeight = 0;
+  let catalogueValue = 0, catalogueWeight = 0, catalogueGrossWeight = 0;
   if (unitType === 'weight') {
     catalogueWeight = minQty;
     catalogueValue = weight === 0 ? 0 : itemValue * (minQty / weight);
+    catalogueGrossWeight = weight === 0 ? minQty : minQty * (manualGross / weight);
   } else if (unitType === 'count' || unitType === 'measure') {
     catalogueWeight = baseQty === 0 ? 0 : weight * (minQty / baseQty);
     catalogueValue = baseQty === 0 ? 0 : itemValue * (minQty / baseQty);
+    catalogueGrossWeight = baseQty === 0 ? 0 : manualGross * (minQty / baseQty);
+  }
+  // Packaging weight is added FLAT to the per-lot gross (no sale-unit scaling),
+  // overriding the manual gross when the packaging section is in use.
+  if (hasPackaging) {
+    catalogueGrossWeight = catalogueWeight + packagingWeight;
   }
   // Round to 4dp so the displayed per-unit value is exactly what gets used
   // when this item is a component elsewhere (values always reconcile by hand).
   catalogueValue = round5(catalogueValue);
 
-  const result = { materialsTotal: round5(materialsTotal), labourTotal: round5(labourTotal), totalCost: round5(totalCost), itemValue, catalogueValue, catalogueWeight, circular: anyCircular };
+  const result = { materialsTotal: round5(materialsTotal), labourTotal: round5(labourTotal), packagingTotal: round5(packagingTotal), packagingWeight: round5(packagingWeight), hasPackaging, totalCost: round5(totalCost), itemValue, catalogueValue, catalogueWeight, catalogueGrossWeight, circular: anyCircular };
   visiting.delete(itemId);
   cache.set(itemId, result);
   return result;
@@ -1279,6 +1316,12 @@ function buildParentIndex() {
   for (const c of state.components) {
     if (!idx.has(c.componentItemId)) idx.set(c.componentItemId, new Set());
     idx.get(c.componentItemId).add(c.parentItemId);
+  }
+  // Containers count as dependencies too: if a container item changes, items
+  // that use it as packaging must recompute (cost + gross weight).
+  for (const p of (state.packaging || [])) {
+    if (!idx.has(p.containerItemId)) idx.set(p.containerItemId, new Set());
+    idx.get(p.containerItemId).add(p.parentItemId);
   }
   _parentIndex = idx;
   return idx;
@@ -1631,7 +1674,7 @@ function renderItemList() {
 
   let html = `<table class="list-table">
     <thead><tr>
-      <th>Description</th><th>Unit</th><th class="num th-value">Value<br><span class="th-sub"><span class="th-paren">(</span><span class="coin-g">\u20B2</span>.<span class="coin-s">\uFE69</span><span class="coin-c">\u00a2</span><span class="th-paren">)</span></span></th><th class="num">Weight</th>
+      <th>Description</th><th>Unit</th><th class="num th-value">Value<br><span class="th-sub"><span class="th-paren">(</span><span class="coin-g">\u20B2</span>.<span class="coin-s">\uFE69</span><span class="coin-c">\u00a2</span><span class="th-paren">)</span></span></th><th class="num">Weight<br><span class="th-sub">gross / net</span></th>
     </tr></thead><tbody>`;
 
   const renderCatBlock = (catId, indented) => {
@@ -1650,7 +1693,7 @@ function renderItemList() {
     if (isCollapsed) return;
     for (const it of items) {
       const su = getSaleUnit(it.saleUnitId);
-      const res = memo.get(it.id) || { catalogueValue: 0, catalogueWeight: 0 };
+      const res = memo.get(it.id) || { catalogueValue: 0, catalogueWeight: 0, catalogueGrossWeight: 0 };
       const sel = it.id === selectedItemId ? ' selected' : '';
       const unitName = su ? su.name : '\u2014';
       const mq = it.minSaleQty || 0;
@@ -1659,11 +1702,17 @@ function renderItemList() {
       const qtyNum = +mq.toFixed(4);
       const unitWord = su ? (qtyNum === 1 ? su.name : (su.namePlural || su.name)) : '';
       const unitLabel = su ? `${groupThousands(String(qtyNum))} ${escapeHtml(unitWord)}` : escapeHtml(unitName);
+      const netW = Number(res.catalogueWeight) || 0;
+      const grossW = Number(res.catalogueGrossWeight) || 0;
+      // Weight cell: gross on top, net beneath. Collapse to one line when equal.
+      const weightCell = (Math.abs(grossW - netW) < 0.000005)
+        ? groupThousands(netW.toFixed(2))
+        : `${groupThousands(grossW.toFixed(2))}<span class="lr-weight-net">${groupThousands(netW.toFixed(2))}</span>`;
       html += `<tr class="list-row${sel}${indented ? ' indented' : ''}" data-item-row="${it.id}">
         <td class="lr-name">${escapeHtml(it.name)}${it.isStub ? ' <span class="stub-tag">incomplete</span>' : ''}</td>
         <td class="lr-unit">${unitLabel}</td>
         <td class="num lr-value">\u20B2${groupThousands((Number(res.catalogueValue) || 0).toFixed(2))}</td>
-        <td class="num lr-weight">${groupThousands((Number(res.catalogueWeight) || 0).toFixed(2))}</td>
+        <td class="num lr-weight">${weightCell}</td>
       </tr>`;
     }
   };
@@ -2549,9 +2598,10 @@ function openNewItemEditor() {
   draftItem = {
     id: nextId(state.items),
     name: '', categoryId: null, isMagic: false, rarityId: null,
-    weightLbs: 0, minSaleQty: 1, saleUnitId: null,
+    weightLbs: 0, grossWeightLbs: null, minSaleQty: 1, saleUnitId: null,
     baseMeasureQty: 0, markupAmount: 0, description: '', craftingDescription: '',
     _components: [],
+    _packaging: [],
     _professions: [],
     _baseQtyUntouched: true   // for NEW items, units-produced follows weight until edited
   };
@@ -2564,8 +2614,9 @@ function openEditItemEditor(id) {
   selectedItemId = id;
   draftIsNew = false;
   draftItem = JSON.parse(JSON.stringify(item));
-  // pull this item's component + labour rows into the draft as working copies
+  // pull this item's component + packaging + labour rows into the draft as working copies
   draftItem._components = componentsOf(id).map(c => ({ ...c }));
+  draftItem._packaging = packagingOf(id).map(p => ({ ...p }));
   draftItem._professions = professionsOf(id).map(ip => ({ ...ip }));
   navigate('editor');
 }
@@ -2592,17 +2643,20 @@ function computeDraftResult() {
   const savedItems = state.items;
   const savedComps = state.components;
   const savedProfs = state.itemProfessions;
+  const savedPack = state.packaging || [];
 
   const itemsTmp = draftIsNew ? savedItems.concat([d]) : savedItems.map(it => it.id === d.id ? d : it);
   const compsTmp = savedComps.filter(c => c.parentItemId !== d.id).concat(d._components.map(c => ({ ...c, parentItemId: d.id })));
   const profsTmp = savedProfs.filter(ip => ip.itemId !== d.id).concat(d._professions.map(ip => ({ ...ip, itemId: d.id })));
+  const packTmp = savedPack.filter(p => p.parentItemId !== d.id).concat((d._packaging || []).map(p => ({ ...p, parentItemId: d.id })));
 
   state.items = itemsTmp;
   state.components = compsTmp;
   state.itemProfessions = profsTmp;
+  state.packaging = packTmp;
   invalidateParentIndex();
   const memo = rebuildCalcCache();
-  const result = memo.get(d.id) || { materialsTotal: 0, labourTotal: 0, totalCost: 0, itemValue: 0, catalogueValue: 0, catalogueWeight: 0 };
+  const result = memo.get(d.id) || { materialsTotal: 0, labourTotal: 0, packagingTotal: 0, packagingWeight: 0, hasPackaging: false, totalCost: 0, itemValue: 0, catalogueValue: 0, catalogueWeight: 0, catalogueGrossWeight: 0 };
   // capture component per-single-unit values + weights for the grid.
   // C1: divide the catalogue (per-lot) figures by the component's min sale qty
   // so the grid prices individual sale units, matching the engine.
@@ -2615,15 +2669,26 @@ function computeDraftResult() {
     compUnitValues.set(c.componentItemId, r ? (r.catalogueValue || 0) / msq : 0);
     compUnitWeights.set(c.componentItemId, r ? (r.catalogueWeight || 0) / msq : 0);
   }
+  // same for packaging container lines (per-single value + NET weight)
+  const packUnitValues = new Map();
+  const packUnitWeights = new Map();
+  for (const p of (d._packaging || [])) {
+    const r = memo.get(p.containerItemId);
+    const ci = getItem(p.containerItemId);
+    const msq = ci && (ci.minSaleQty || 0) > 0 ? ci.minSaleQty : 1;
+    packUnitValues.set(p.containerItemId, r ? (r.catalogueValue || 0) / msq : 0);
+    packUnitWeights.set(p.containerItemId, r ? (r.catalogueWeight || 0) / msq : 0);
+  }
 
   // restore
   state.items = savedItems;
   state.components = savedComps;
   state.itemProfessions = savedProfs;
+  state.packaging = savedPack;
   invalidateParentIndex();
   rebuildCalcCache();
 
-  return { result, compUnitValues, compUnitWeights };
+  return { result, compUnitValues, compUnitWeights, packUnitValues, packUnitWeights };
 }
 
 // Assemble a clean, readable text summary of the current draft item for pasting.
@@ -2686,23 +2751,56 @@ function buildItemText() {
   }
   t += nl;
 
+  // Containers / packaging
+  const packs = d._packaging || [];
+  const { packUnitValues: puv, packUnitWeights: puw } = computeDraftResult();
+  if (packs.length) {
+    t += 'CONTAINERS / PACKAGING (' + packs.length + ')' + nl;
+    packs.forEach(p => {
+      const ci = getItem(p.containerItemId);
+      const csu = ci ? getSaleUnit(ci.saleUnitId) : null;
+      const qty = Number(p.quantity) || 0;
+      const unitWord = csu ? (qty === 1 ? csu.name : (csu.namePlural || csu.name)) : '';
+      const lineCost = qty * (puv.get(p.containerItemId) || 0);
+      const lineWt = qty * (puw.get(p.containerItemId) || 0);
+      t += '  - ' + (ci ? ci.name : 'Unknown') + ': ' + fmtNum(qty) + (unitWord ? ' ' + unitWord : '') +
+           '  (' + fmtCurrency(lineCost) + ', ' + fmtNum(lineWt) + ' lbs net \u2192 gross)' + nl;
+    });
+    t += nl;
+  }
+
   // Costs
   t += 'COSTS' + nl;
   t += '  Components total: ' + fmtCurrency(result.materialsTotal || 0) + nl;
   t += '  Labour total:     ' + fmtCurrency(result.labourTotal || 0) + nl;
+  if ((result.packagingTotal || 0) !== 0) t += '  Packaging total:  ' + fmtCurrency(result.packagingTotal || 0) + nl;
   t += '  Total cost:       ' + fmtCurrency(result.totalCost || 0) + nl;
   if ((d.markupAmount || 0) !== 0) t += '  Markup:           ' + fmtCurrency(d.markupAmount || 0) + nl;
   t += '  Item value:       ' + fmtCurrency(result.itemValue || 0) + nl + nl;
 
   // Sale / physical
+  const netW = d.weightLbs || 0;
+  const packWeight = result.packagingWeight || 0;
+  const grossTotal = result.hasPackaging ? (netW + packWeight) : ((d.grossWeightLbs != null && d.grossWeightLbs !== '') ? (d.grossWeightLbs || 0) : netW);
+  const hasGross = Math.abs(grossTotal - netW) > 0.000005;
   t += 'SALE & WEIGHT' + nl;
-  t += '  Item weight:         ' + fmtNum(d.weightLbs || 0) + ' lbs' + nl;
+  if (hasGross) {
+    t += '  Gross weight:        ' + fmtNum(grossTotal) + ' lbs' + (result.hasPackaging ? ' (net + packaging)' : '') + nl;
+    t += '  Net weight:          ' + fmtNum(netW) + ' lbs' + nl;
+  } else {
+    t += '  Item weight:         ' + fmtNum(netW) + ' lbs' + nl;
+  }
   t += '  Units produced:      ' + fmtNum(d.baseMeasureQty || 0) + nl;
   t += '  Sale unit:           ' + (su ? su.name : '\u2014') + nl;
   t += '  Minimum sale qty:    ' + fmtNum(d.minSaleQty || 0) + nl;
   t += '  Catalogue value:     ' + fmtCurrency(result.catalogueValue || 0) + ' per ' + (su ? su.name : 'unit') +
        (Number(d.minSaleQty) !== 1 ? ' lot (min ' + fmtNum(d.minSaleQty) + ')' : '') + nl;
-  t += '  Catalogue weight:    ' + fmtNum(result.catalogueWeight || 0) + ' lbs' + nl;
+  if (hasGross) {
+    t += '  Catalogue wt (gross):' + fmtNum(result.catalogueGrossWeight || 0) + ' lbs' + nl;
+    t += '  Catalogue wt (net):  ' + fmtNum(result.catalogueWeight || 0) + ' lbs' + nl;
+  } else {
+    t += '  Catalogue weight:    ' + fmtNum(result.catalogueWeight || 0) + ' lbs' + nl;
+  }
 
   // Crafting description
   if (d.craftingDescription && d.craftingDescription.trim()) {
@@ -2800,6 +2898,13 @@ function renderEditorPage(app) {
           <div class="add-row" id="addProfessionRow"></div>
           <div class="panel-subtotal"><span>Labour total</span><span class="val" id="labourTotalVal"></span></div>
         </div>
+        <div class="panel">
+          <p class="panel-title">Containers / packaging</p>
+          <p class="panel-note">Adds cost to the item, and container net weight to <strong>gross</strong> weight only. Net weight is unaffected.</p>
+          <div id="packagingGridWrap"></div>
+          <div class="add-row" id="addPackagingRow"></div>
+          <div class="panel-subtotal"><span>Packaging total</span><span class="val" id="packagingTotalVal"></span></div>
+        </div>
       </div>
 
       <div class="totals-block">
@@ -2807,7 +2912,8 @@ function renderEditorPage(app) {
           <div class="t-item"><span class="t-label">Total cost</span><span class="t-val" id="totalCostVal"></span></div>
           <div class="t-item"><span class="t-label">Markup</span><input type="number" id="f-markup" step="0.00001" value="${fmtNumInput(item.markupAmount)}" /></div>
           <div class="t-item t-final"><span class="t-label">Item value</span><span class="t-val" id="itemValueVal"></span></div>
-          <div class="t-item"><span class="t-label">Item weight (lbs)</span><input type="number" id="f-weight" step="0.00001" value="${fmtNumInput(item.weightLbs)}" /></div>
+          <div class="t-item"><span class="t-label">Net weight (lbs)</span><input type="number" id="f-weight" step="0.00001" value="${fmtNumInput(item.weightLbs)}" /></div>
+          <div class="t-item"><span class="t-label">Gross weight (lbs)</span><input type="number" id="f-grossweight" step="0.00001" placeholder="\u2014 same as net" value="${item.grossWeightLbs != null && item.grossWeightLbs !== '' ? fmtNumInput(item.grossWeightLbs) : ''}" ${(item._packaging && item._packaging.length) ? 'disabled title="Computed from packaging section"' : ''} /></div>
         </div>
         <div class="sale-fields sale-fields-3">
           <div class="field"><label for="f-baseqty">Number of units produced</label><input type="number" id="f-baseqty" step="0.01" value="${(Number(item.baseMeasureQty) || 0).toFixed(2)}" /></div>
@@ -2816,7 +2922,8 @@ function renderEditorPage(app) {
         </div>
         <div class="catalogue-strip">
           <div><div class="c-label">Catalogue value (per sale unit)</div><div class="c-val" id="catValueVal"></div></div>
-          <div><div class="c-label">Catalogue weight (per sale unit, lbs)</div><div class="c-val" id="catWeightVal"></div></div>
+          <div><div class="c-label">Catalogue weight \u2014 gross (per sale unit, lbs)</div><div class="c-val" id="catGrossWeightVal"></div></div>
+          <div><div class="c-label">Catalogue weight \u2014 net (per sale unit, lbs)</div><div class="c-val" id="catWeightVal"></div></div>
         </div>
       </div>
 
@@ -2861,6 +2968,11 @@ function renderEditorPage(app) {
     }
     updateDraftTotals();
   });
+  document.getElementById('f-grossweight').addEventListener('input', e => {
+    const v = e.target.value.trim();
+    item.grossWeightLbs = v === '' ? null : (parseFloat(v) || 0);
+    updateDraftTotals();
+  });
   document.getElementById('f-saleunit').addEventListener('change', e => {
     if (e.target.value === '__add__') { e.target.value = item.saleUnitId != null ? item.saleUnitId : ''; addNewSaleUnitInline(); return; }
     item.saleUnitId = e.target.value === '' ? null : Number(e.target.value); updateDraftTotals(); updateEditorSaveState();
@@ -2873,8 +2985,10 @@ function renderEditorPage(app) {
 
   renderDraftComponentsGrid();
   renderDraftProfessionsGrid();
+  renderDraftPackagingGrid();
   renderDraftAddComponentRow();
   renderDraftAddProfessionRow();
+  renderDraftAddPackagingRow();
   updateDraftTotals();
 
   // add-new sits at the top of these selects, so explicitly select the real value
@@ -3062,7 +3176,7 @@ function quickAddComponentItemInline() {
     const id = nextId(state.items);
     state.items.push({
       id, name, categoryId: firstCat ? firstCat.id : null, isMagic: false,
-      weightLbs: 0, minSaleQty: 1, saleUnitId: firstUnit ? firstUnit.id : null,
+      weightLbs: 0, grossWeightLbs: null, minSaleQty: 1, saleUnitId: firstUnit ? firstUnit.id : null,
       baseMeasureQty: 0, markupAmount: 0, description: '', craftingDescription: '',
       isStub: true
     });
@@ -3082,11 +3196,16 @@ function saveDraft() {
   // Strip working fields off the item record
   const components = d._components;
   const professions = d._professions;
+  const packaging = d._packaging || [];
   const clean = { ...d };
   delete clean._components;
+  delete clean._packaging;
   delete clean._professions;
   delete clean.isStub; // editing + saving means it's no longer an incomplete stub
   delete clean._baseQtyUntouched;
+  // If the packaging section is in use, gross is computed (net + packaging), so
+  // don't persist a stale manual gross value.
+  if (packaging.length > 0) clean.grossWeightLbs = null;
 
   if (draftIsNew) {
     state.items.push(clean);
@@ -3103,6 +3222,17 @@ function saveDraft() {
       parentItemId: d.id,
       componentItemId: c.componentItemId,
       quantity: c.quantity || 0
+    });
+  }
+  // Replace this item's packaging rows with the draft's
+  if (!state.packaging) state.packaging = [];
+  state.packaging = state.packaging.filter(p => p.parentItemId !== d.id);
+  for (const p of packaging) {
+    state.packaging.push({
+      id: nextId(state.packaging),
+      parentItemId: d.id,
+      containerItemId: p.containerItemId,
+      quantity: p.quantity || 0
     });
   }
   // Same for labour rows
@@ -3298,6 +3428,181 @@ function computeDraftResultFor(itemId) {
   return { compUnitWeights, compUnitValues };
 }
 
+/* ---- Draft containers/packaging grid ---- */
+// Toggle the gross-weight field to read-only when packaging is in use, and
+// refresh its displayed value from the computed gross.
+function syncGrossFieldFromPackaging() {
+  const gEl = document.getElementById('f-grossweight');
+  if (!gEl) return;
+  const has = (draftItem._packaging || []).length > 0;
+  gEl.disabled = has;
+  if (has) {
+    const { result } = computeDraftResult();
+    // show the item's total gross (net + packaging) rather than a per-lot figure
+    const net = draftItem.weightLbs || 0;
+    const gross = net + (result.packagingWeight || 0);
+    gEl.value = fmtNumInput(gross);
+    gEl.title = 'Computed from packaging section';
+  } else {
+    gEl.title = '';
+    gEl.value = (draftItem.grossWeightLbs != null && draftItem.grossWeightLbs !== '') ? fmtNumInput(draftItem.grossWeightLbs) : '';
+  }
+}
+
+function renderDraftPackagingGrid() {
+  const wrap = document.getElementById('packagingGridWrap');
+  if (!wrap) return;
+  const rows = draftItem._packaging || [];
+  if (rows.length === 0) { wrap.innerHTML = '<p style="color:var(--ink-faint);font-size:13px;margin:4px 0;">No packaging yet.</p>'; syncGrossFieldFromPackaging(); return; }
+  const { packUnitValues, packUnitWeights } = computeDraftResult();
+  let totalWeight = 0;
+  let html = `<table class="grid-table"><thead><tr>
+      <th>Container</th><th class="num">Qty</th><th>Sale unit</th><th class="num">Cost</th><th class="num">Net wt</th><th></th>
+    </tr></thead><tbody>`;
+  rows.forEach((p, idx) => {
+    const contItem = getItem(p.containerItemId);
+    const unitVal = packUnitValues.get(p.containerItemId) || 0;
+    const unitWt = packUnitWeights.get(p.containerItemId) || 0;
+    const lineCost = (p.quantity || 0) * unitVal;
+    const lineWt = (p.quantity || 0) * unitWt;
+    totalWeight += lineWt;
+    const csu = contItem ? getSaleUnit(contItem.saleUnitId) : null;
+    const qtyNum = Number(p.quantity) || 0;
+    const unitLabel = csu ? (qtyNum === 1 ? csu.name : (csu.namePlural || csu.name)) : '\u2014';
+    html += `<tr>
+      <td class="row-name">${escapeHtml(contItem ? contItem.name : 'Unknown item')}</td>
+      <td class="num"><input type="number" step="0.00001" value="${fmtNumInput(p.quantity)}" data-draft-pack-qty="${idx}" /></td>
+      <td class="comp-unit">${escapeHtml(unitLabel)}</td>
+      <td class="num line-cost">${fmtCurrency(lineCost)}</td>
+      <td class="num line-weight">${fmtNum(lineWt)}</td>
+      <td><button class="row-del" data-draft-pack-del="${idx}" title="Remove">\u00d7</button></td>
+    </tr>`;
+  });
+  html += `</tbody><tfoot><tr class="grid-foot">
+      <td colspan="4" class="num">Added to gross weight (lbs)</td>
+      <td class="num" id="packTotalWeight">${fmtNum(totalWeight)}</td>
+      <td></td>
+    </tr></tfoot>`;
+  html += '</table>';
+  wrap.innerHTML = html;
+  wrap.querySelectorAll('[data-draft-pack-qty]').forEach(inp => {
+    inp.addEventListener('input', e => {
+      const idx = Number(e.target.dataset.draftPackQty);
+      draftItem._packaging[idx].quantity = parseFloat(e.target.value) || 0;
+      updateDraftTotals();
+      const { packUnitValues, packUnitWeights } = computeDraftResult();
+      const p = draftItem._packaging[idx];
+      const tr = e.target.closest('tr');
+      const costCell = tr.querySelector('.line-cost');
+      const wtCell = tr.querySelector('.line-weight');
+      if (costCell) costCell.textContent = fmtCurrency((p.quantity || 0) * (packUnitValues.get(p.containerItemId) || 0));
+      if (wtCell) wtCell.textContent = fmtNum((p.quantity || 0) * (packUnitWeights.get(p.containerItemId) || 0));
+      const unitCell = tr.querySelector('.comp-unit');
+      if (unitCell) {
+        const ci = getItem(p.containerItemId);
+        const csu = ci ? getSaleUnit(ci.saleUnitId) : null;
+        const qn = Number(p.quantity) || 0;
+        unitCell.textContent = csu ? (qn === 1 ? csu.name : (csu.namePlural || csu.name)) : '\u2014';
+      }
+      let tot = 0;
+      draftItem._packaging.forEach(pp => { tot += (pp.quantity || 0) * (packUnitWeights.get(pp.containerItemId) || 0); });
+      const totCell = document.getElementById('packTotalWeight');
+      if (totCell) totCell.textContent = fmtNum(tot);
+      syncGrossFieldFromPackaging();
+    });
+  });
+  wrap.querySelectorAll('[data-draft-pack-del]').forEach(btn => {
+    btn.addEventListener('click', e => {
+      const idx = Number(e.target.dataset.draftPackDel);
+      draftItem._packaging.splice(idx, 1);
+      renderDraftPackagingGrid();
+      renderDraftAddPackagingRow();
+      updateDraftTotals();
+      syncGrossFieldFromPackaging();
+    });
+  });
+  syncGrossFieldFromPackaging();
+}
+
+function renderDraftAddPackagingRow() {
+  const wrap = document.getElementById('addPackagingRow');
+  if (!wrap) return;
+  wrap.innerHTML = `<button class="btn btn-moss btn-sm" id="newPackAddBtn">+ Add container</button>`;
+  document.getElementById('newPackAddBtn').addEventListener('click', openAddPackagingDialog);
+}
+
+function openAddPackagingDialog() {
+  const others = state.items.filter(i => i.id !== draftItem.id).slice().sort((a, b) => a.name.localeCompare(b.name));
+  openDialog('Add container', `
+    <div class="field">
+      <label>Container</label>
+      <input type="text" id="packSearch" class="combo-search" placeholder="Type to search items\u2026" autocomplete="off" />
+      <input type="hidden" id="newPackSelect" value="" />
+      <div class="combo-list" id="packList"></div>
+      <div class="combo-chosen" id="packChosen" style="display:none;"></div>
+    </div>
+    <div class="field">
+      <label>Quantity</label>
+      <div class="qty-unit-row">
+        <input type="number" id="newPackQty" step="0.00001" value="1.0000" />
+        <span class="qty-unit" id="newPackUnit">\u2014</span>
+      </div>
+    </div>
+    <div class="qty-weight-note" id="newPackWeight" style="display:none;"></div>
+    <div class="add-row-error" id="newPackError" style="display:none;"></div>
+  `, () => {
+    const val = document.getElementById('newPackSelect').value;
+    if (val === '') { alert('Please choose a container.'); return false; }
+    const contId = Number(val);
+    const qty = parseFloat(document.getElementById('newPackQty').value) || 0;
+    const errEl = document.getElementById('newPackError');
+    if (draftWouldCreateCycle(contId)) {
+      errEl.textContent = 'Cannot add: this would create a circular reference.';
+      errEl.style.display = 'block'; return false;
+    }
+    if ((draftItem._packaging || []).some(p => p.containerItemId === contId)) {
+      errEl.textContent = 'That container is already listed. Adjust its quantity instead.';
+      errEl.style.display = 'block'; return false;
+    }
+    if (!draftItem._packaging) draftItem._packaging = [];
+    draftItem._packaging.push({ containerItemId: contId, quantity: qty });
+    renderDraftPackagingGrid();
+    updateDraftTotals();
+    return true;
+  }, { requireSelectors: ['newPackSelect'] });
+
+  setupComboPicker({
+    items: others,
+    searchId: 'packSearch',
+    listId: 'packList',
+    hiddenId: 'newPackSelect',
+    chosenId: 'packChosen',
+    quickAddLabel: '+ Quick-add new item\u2026',
+    onQuickAdd: () => { closeDialog(); quickAddComponentItemInline(); }
+  });
+
+  function refreshPackPreview() {
+    const hidden = document.getElementById('newPackSelect');
+    const unitEl = document.getElementById('newPackUnit');
+    const wtEl = document.getElementById('newPackWeight');
+    const qtyEl = document.getElementById('newPackQty');
+    if (!hidden || !unitEl || !wtEl || !qtyEl) return;
+    const id = hidden.value;
+    if (id === '') { unitEl.textContent = '\u2014'; wtEl.style.display = 'none'; return; }
+    const contId = Number(id);
+    const qty = parseFloat(qtyEl.value) || 0;
+    const su = getSaleUnit((getItem(contId) || {}).saleUnitId);
+    const unitWord = su ? (qty === 1 ? su.name : (su.namePlural || su.name)) : '';
+    unitEl.textContent = unitWord || '\u2014';
+    const { compUnitWeights } = computeDraftResultFor(contId);
+    const unitWt = compUnitWeights.get(contId) || 0;
+    wtEl.style.display = 'block';
+    wtEl.textContent = `Net weight added to gross: ${fmtNum(qty * unitWt)} lbs`;
+  }
+  document.getElementById('newPackSelect').addEventListener('change', refreshPackPreview);
+  document.getElementById('newPackQty').addEventListener('input', refreshPackPreview);
+}
+
 /* Reusable searchable picker: a text box that live-filters a list of items
    shown beneath it; tap a result to select. Scales to very large item counts
    by matching anywhere in the name and capping the visible results. */
@@ -3478,9 +3783,11 @@ function updateDraftTotals() {
   const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
   set('materialsTotalVal', fmtCurrency(result.materialsTotal));
   set('labourTotalVal', fmtCurrency(result.labourTotal));
+  set('packagingTotalVal', fmtCurrency(result.packagingTotal || 0));
   set('totalCostVal', fmtCurrency(result.totalCost));
   set('itemValueVal', fmtCurrency(result.itemValue));
   set('catValueVal', fmtCurrency(result.catalogueValue));
+  set('catGrossWeightVal', fmtNum(result.catalogueGrossWeight) + ' lbs');
   set('catWeightVal', fmtNum(result.catalogueWeight) + ' lbs');
   const finalEl = document.getElementById('itemValueVal');
   if (finalEl && finalEl.closest('.t-final')) flashEl(finalEl.closest('.t-final'));
