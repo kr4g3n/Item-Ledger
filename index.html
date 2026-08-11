@@ -897,7 +897,7 @@ input[type="number"] {
 <header class="topbar">
   <div>
     <h1><span class="mark">⚖</span> The Item Ledger</h1>
-    <div class="sub">Works fully offline &middot; your data stays on this device &middot; <span style="opacity:0.45">v47</span></div>
+    <div class="sub">Works fully offline &middot; your data stays on this device &middot; <span style="opacity:0.45">v48</span></div>
   </div>
 </header>
 <div class="world-bar" id="worldBar"></div>
@@ -1253,8 +1253,13 @@ function computeItem(itemId, cache, visiting) {
     const contMinQty = contItem && (contItem.minSaleQty || 0) > 0 ? contItem.minSaleQty : 1;
     const perUnitValue = (contResult.catalogueValue || 0) / contMinQty;
     const perUnitNetWeight = (contResult.catalogueWeight || 0) / contMinQty; // container's own NET weight
-    packagingTotal += (p.quantity || 0) * perUnitValue;
-    packagingWeight += (p.quantity || 0) * perUnitNetWeight;
+    // Cost is charged on the cost quantity (reused containers -> fewer charged).
+    // Gross weight uses the weight quantity (physical count for the batch).
+    // weightQuantity falls back to the cost quantity when unset (the common case).
+    const costQty = p.quantity || 0;
+    const weightQty = (p.weightQuantity != null && p.weightQuantity !== '') ? (p.weightQuantity || 0) : costQty;
+    packagingTotal += costQty * perUnitValue;
+    packagingWeight += weightQty * perUnitNetWeight;
   }
   const hasPackaging = packagingOf(itemId).length > 0;
 
@@ -2616,7 +2621,17 @@ function openEditItemEditor(id) {
   draftItem = JSON.parse(JSON.stringify(item));
   // pull this item's component + packaging + labour rows into the draft as working copies
   draftItem._components = componentsOf(id).map(c => ({ ...c }));
-  draftItem._packaging = packagingOf(id).map(p => ({ ...p }));
+  draftItem._packaging = packagingOf(id).map(p => {
+    const copy = { ...p };
+    // weightQuantity null in storage means "same as cost qty"; keep it tracking.
+    if (copy.weightQuantity == null || copy.weightQuantity === '') {
+      copy.weightQuantity = copy.quantity;
+      copy._weightQtyUntouched = true;
+    } else {
+      copy._weightQtyUntouched = false;
+    }
+    return copy;
+  });
   draftItem._professions = professionsOf(id).map(ip => ({ ...ip }));
   navigate('editor');
 }
@@ -2759,12 +2774,16 @@ function buildItemText() {
     packs.forEach(p => {
       const ci = getItem(p.containerItemId);
       const csu = ci ? getSaleUnit(ci.saleUnitId) : null;
-      const qty = Number(p.quantity) || 0;
-      const unitWord = csu ? (qty === 1 ? csu.name : (csu.namePlural || csu.name)) : '';
-      const lineCost = qty * (puv.get(p.containerItemId) || 0);
-      const lineWt = qty * (puw.get(p.containerItemId) || 0);
-      t += '  - ' + (ci ? ci.name : 'Unknown') + ': ' + fmtNum(qty) + (unitWord ? ' ' + unitWord : '') +
-           '  (' + fmtCurrency(lineCost) + ', ' + fmtNum(lineWt) + ' lbs net \u2192 gross)' + nl;
+      const costQty = Number(p.quantity) || 0;
+      const wtQty = (p.weightQuantity != null && p.weightQuantity !== '') ? (Number(p.weightQuantity) || 0) : costQty;
+      const unitWord = csu ? (wtQty === 1 ? csu.name : (csu.namePlural || csu.name)) : '';
+      const lineCost = costQty * (puv.get(p.containerItemId) || 0);
+      const lineWt = wtQty * (puw.get(p.containerItemId) || 0);
+      const qtyStr = (Math.abs(wtQty - costQty) > 0.000005)
+        ? fmtNum(costQty) + ' charged / ' + fmtNum(wtQty) + ' for weight'
+        : fmtNum(costQty);
+      t += '  - ' + (ci ? ci.name : 'Unknown') + ': ' + qtyStr + (unitWord ? ' ' + unitWord : '') +
+           '  (' + fmtCurrency(lineCost) + ', ' + fmtNum(lineWt) + ' lbs \u2192 gross)' + nl;
     });
     t += nl;
   }
@@ -3228,11 +3247,15 @@ function saveDraft() {
   if (!state.packaging) state.packaging = [];
   state.packaging = state.packaging.filter(p => p.parentItemId !== d.id);
   for (const p of packaging) {
+    const costQty = p.quantity || 0;
+    const wq = (p.weightQuantity != null && p.weightQuantity !== '') ? p.weightQuantity : costQty;
     state.packaging.push({
       id: nextId(state.packaging),
       parentItemId: d.id,
       containerItemId: p.containerItemId,
-      quantity: p.quantity || 0
+      quantity: costQty,
+      // store null when weight qty matches cost qty, so it keeps auto-tracking
+      weightQuantity: (wq === costQty) ? null : wq
     });
   }
   // Same for labour rows
@@ -3457,21 +3480,23 @@ function renderDraftPackagingGrid() {
   const { packUnitValues, packUnitWeights } = computeDraftResult();
   let totalWeight = 0;
   let html = `<table class="grid-table"><thead><tr>
-      <th>Container</th><th class="num">Qty</th><th>Sale unit</th><th class="num">Cost</th><th class="num">Net wt</th><th></th>
+      <th>Container</th><th class="num">Cost qty</th><th class="num">Weight qty</th><th>Sale unit</th><th class="num">Cost</th><th class="num">Net wt</th><th></th>
     </tr></thead><tbody>`;
   rows.forEach((p, idx) => {
     const contItem = getItem(p.containerItemId);
     const unitVal = packUnitValues.get(p.containerItemId) || 0;
     const unitWt = packUnitWeights.get(p.containerItemId) || 0;
-    const lineCost = (p.quantity || 0) * unitVal;
-    const lineWt = (p.quantity || 0) * unitWt;
+    const costQty = Number(p.quantity) || 0;
+    const wtQty = (p.weightQuantity != null && p.weightQuantity !== '') ? (Number(p.weightQuantity) || 0) : costQty;
+    const lineCost = costQty * unitVal;
+    const lineWt = wtQty * unitWt;
     totalWeight += lineWt;
     const csu = contItem ? getSaleUnit(contItem.saleUnitId) : null;
-    const qtyNum = Number(p.quantity) || 0;
-    const unitLabel = csu ? (qtyNum === 1 ? csu.name : (csu.namePlural || csu.name)) : '\u2014';
+    const unitLabel = csu ? (wtQty === 1 ? csu.name : (csu.namePlural || csu.name)) : '\u2014';
     html += `<tr>
       <td class="row-name">${escapeHtml(contItem ? contItem.name : 'Unknown item')}</td>
-      <td class="num"><input type="number" step="0.00001" value="${fmtNumInput(p.quantity)}" data-draft-pack-qty="${idx}" /></td>
+      <td class="num"><input type="number" step="0.00001" value="${fmtNumInput(p.quantity)}" data-draft-pack-costqty="${idx}" /></td>
+      <td class="num"><input type="number" step="0.00001" value="${fmtNumInput(wtQty)}" data-draft-pack-wtqty="${idx}" /></td>
       <td class="comp-unit">${escapeHtml(unitLabel)}</td>
       <td class="num line-cost">${fmtCurrency(lineCost)}</td>
       <td class="num line-weight">${fmtNum(lineWt)}</td>
@@ -3479,36 +3504,63 @@ function renderDraftPackagingGrid() {
     </tr>`;
   });
   html += `</tbody><tfoot><tr class="grid-foot">
-      <td colspan="4" class="num">Added to gross weight (lbs)</td>
+      <td colspan="5" class="num">Added to gross weight (lbs)</td>
       <td class="num" id="packTotalWeight">${fmtNum(totalWeight)}</td>
       <td></td>
     </tr></tfoot>`;
   html += '</table>';
   wrap.innerHTML = html;
-  wrap.querySelectorAll('[data-draft-pack-qty]').forEach(inp => {
+
+  const recomputeRow = (idx, tr) => {
+    const { packUnitValues, packUnitWeights } = computeDraftResult();
+    const p = draftItem._packaging[idx];
+    const costQty = Number(p.quantity) || 0;
+    const wtQty = (p.weightQuantity != null && p.weightQuantity !== '') ? (Number(p.weightQuantity) || 0) : costQty;
+    const costCell = tr.querySelector('.line-cost');
+    const wtCell = tr.querySelector('.line-weight');
+    if (costCell) costCell.textContent = fmtCurrency(costQty * (packUnitValues.get(p.containerItemId) || 0));
+    if (wtCell) wtCell.textContent = fmtNum(wtQty * (packUnitWeights.get(p.containerItemId) || 0));
+    const unitCell = tr.querySelector('.comp-unit');
+    if (unitCell) {
+      const ci = getItem(p.containerItemId);
+      const csu = ci ? getSaleUnit(ci.saleUnitId) : null;
+      unitCell.textContent = csu ? (wtQty === 1 ? csu.name : (csu.namePlural || csu.name)) : '\u2014';
+    }
+    let tot = 0;
+    draftItem._packaging.forEach(pp => {
+      const cq = Number(pp.quantity) || 0;
+      const wq = (pp.weightQuantity != null && pp.weightQuantity !== '') ? (Number(pp.weightQuantity) || 0) : cq;
+      tot += wq * (packUnitWeights.get(pp.containerItemId) || 0);
+    });
+    const totCell = document.getElementById('packTotalWeight');
+    if (totCell) totCell.textContent = fmtNum(tot);
+    syncGrossFieldFromPackaging();
+  };
+
+  wrap.querySelectorAll('[data-draft-pack-costqty]').forEach(inp => {
     inp.addEventListener('input', e => {
-      const idx = Number(e.target.dataset.draftPackQty);
-      draftItem._packaging[idx].quantity = parseFloat(e.target.value) || 0;
-      updateDraftTotals();
-      const { packUnitValues, packUnitWeights } = computeDraftResult();
+      const idx = Number(e.target.dataset.draftPackCostqty);
       const p = draftItem._packaging[idx];
-      const tr = e.target.closest('tr');
-      const costCell = tr.querySelector('.line-cost');
-      const wtCell = tr.querySelector('.line-weight');
-      if (costCell) costCell.textContent = fmtCurrency((p.quantity || 0) * (packUnitValues.get(p.containerItemId) || 0));
-      if (wtCell) wtCell.textContent = fmtNum((p.quantity || 0) * (packUnitWeights.get(p.containerItemId) || 0));
-      const unitCell = tr.querySelector('.comp-unit');
-      if (unitCell) {
-        const ci = getItem(p.containerItemId);
-        const csu = ci ? getSaleUnit(ci.saleUnitId) : null;
-        const qn = Number(p.quantity) || 0;
-        unitCell.textContent = csu ? (qn === 1 ? csu.name : (csu.namePlural || csu.name)) : '\u2014';
+      p.quantity = parseFloat(e.target.value) || 0;
+      // weight qty follows cost qty until the user has touched it directly
+      if (p._weightQtyUntouched) {
+        p.weightQuantity = p.quantity;
+        const tr = e.target.closest('tr');
+        const wtInput = tr.querySelector('[data-draft-pack-wtqty]');
+        if (wtInput) wtInput.value = fmtNumInput(p.weightQuantity);
       }
-      let tot = 0;
-      draftItem._packaging.forEach(pp => { tot += (pp.quantity || 0) * (packUnitWeights.get(pp.containerItemId) || 0); });
-      const totCell = document.getElementById('packTotalWeight');
-      if (totCell) totCell.textContent = fmtNum(tot);
-      syncGrossFieldFromPackaging();
+      updateDraftTotals();
+      recomputeRow(idx, e.target.closest('tr'));
+    });
+  });
+  wrap.querySelectorAll('[data-draft-pack-wtqty]').forEach(inp => {
+    inp.addEventListener('input', e => {
+      const idx = Number(e.target.dataset.draftPackWtqty);
+      const p = draftItem._packaging[idx];
+      p.weightQuantity = parseFloat(e.target.value) || 0;
+      p._weightQtyUntouched = false; // decoupled from cost qty from now on
+      updateDraftTotals();
+      recomputeRow(idx, e.target.closest('tr'));
     });
   });
   wrap.querySelectorAll('[data-draft-pack-del]').forEach(btn => {
@@ -3565,7 +3617,7 @@ function openAddPackagingDialog() {
       errEl.style.display = 'block'; return false;
     }
     if (!draftItem._packaging) draftItem._packaging = [];
-    draftItem._packaging.push({ containerItemId: contId, quantity: qty });
+    draftItem._packaging.push({ containerItemId: contId, quantity: qty, weightQuantity: qty, _weightQtyUntouched: true });
     renderDraftPackagingGrid();
     updateDraftTotals();
     return true;
