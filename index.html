@@ -900,13 +900,20 @@ input[type="number"] {
 .row-name-btn:hover { color: var(--moss); border-bottom-color: var(--moss); }
 .row-name-btn:active { opacity: 0.7; }
 
+/* Storage protection status banner (Backups screen) */
+.storage-status { border-radius: 8px; padding: 10px 14px; font-size: 13px; line-height: 1.45; margin: 0 0 16px; }
+.storage-status:empty { display: none; }
+.storage-status.ok { background: rgba(68,85,47,0.12); border: 1px solid var(--moss); color: var(--ink); }
+.storage-status.warn { background: rgba(122,46,31,0.10); border: 1px solid var(--wax); color: var(--ink); }
+.storage-status .btn { margin-left: 8px; vertical-align: baseline; }
+
 </style>
 </head>
 <body>
 <header class="topbar">
   <div>
     <h1><span class="mark">⚖</span> The Item Ledger</h1>
-    <div class="sub">Works fully offline &middot; your data stays on this device &middot; <span style="opacity:0.45">v52</span></div>
+    <div class="sub">Works fully offline &middot; your data stays on this device &middot; <span style="opacity:0.45">v54</span></div>
   </div>
 </header>
 <div class="world-bar" id="worldBar"></div>
@@ -2141,7 +2148,8 @@ function renderBackupsScreen(app) {
   app.innerHTML = `
     ${backBar('Backups')}
     <div class="table-screen backups-screen">
-      <p class="screen-note">Backups protect your catalogue. <strong>In-app snapshots</strong> live in this browser and let you undo mistakes quickly, but they are erased if you clear site data. <strong>Downloaded backup files</strong> are saved to your device and are your true off-device safety net \u2014 keep them somewhere durable.</p>
+      <p class="screen-note">Backups protect your catalogue. <strong>In-app snapshots</strong> live in this browser and let you undo mistakes quickly, but they are erased if the browser clears its storage. <strong>Downloaded backup files</strong> are saved to your device and are your true off-device safety net \u2014 keep them somewhere durable, and download one regularly.</p>
+      <div id="storageStatusBanner" class="storage-status"></div>
 
       <div class="backup-actions">
         <button class="btn btn-moss" id="bkNow">Backup now (snapshot + file)</button>
@@ -2185,6 +2193,40 @@ function renderBackupsScreen(app) {
 
   updateBackupIndicator();
   renderBackupList();
+  renderStorageStatus();
+}
+
+// Show whether the browser has granted persistent storage (data protected from
+// automatic eviction) or not, and let the user re-request it.
+async function renderStorageStatus() {
+  const el = document.getElementById('storageStatusBanner');
+  if (!el) return;
+  let persisted = false, supported = false;
+  try {
+    if (navigator.storage && navigator.storage.persisted) {
+      supported = true;
+      persisted = await navigator.storage.persisted();
+    }
+  } catch (e) {}
+  if (!supported) {
+    el.className = 'storage-status warn';
+    el.innerHTML = 'This browser doesn\u2019t report storage protection status. Download file backups regularly to stay safe.';
+    return;
+  }
+  if (persisted) {
+    el.className = 'storage-status ok';
+    el.innerHTML = '\u2713 Storage is <strong>protected</strong> \u2014 the browser has been asked not to evict your data. Still download file backups regularly.';
+  } else {
+    el.className = 'storage-status warn';
+    el.innerHTML = '\u26a0 Storage is <strong>not protected</strong> \u2014 the browser may clear your data on its own. <button class="btn btn-sm" id="reqPersistBtn">Protect storage</button>';
+    const btn = document.getElementById('reqPersistBtn');
+    if (btn) btn.addEventListener('click', async () => {
+      let ok = false;
+      try { ok = navigator.storage.persist ? await navigator.storage.persist() : false; } catch (e) {}
+      toast(ok ? 'Storage is now protected' : 'Browser declined \u2014 keep downloading file backups');
+      renderStorageStatus();
+    });
+  }
 }
 
 async function saveBackupSettingsFromUI() {
@@ -2524,16 +2566,21 @@ function normaliseImportedData(parsed) {
   if (parsed.data && Array.isArray(parsed.data.items)) { data = parsed.data; name = parsed.worldName || 'Imported World'; }
   else if (Array.isArray(parsed.items)) { data = parsed; name = 'Imported World'; }
   else throw new Error('this does not look like an Item Ledger export file');
+  // Start from a blank world (guarantees every expected table exists), then copy
+  // across every table the file provides. This is generic on purpose: it copies
+  // any array table present in blankWorldData AND preserves any extra tables the
+  // file may contain, so a newly-added table can never be silently dropped on
+  // import again (the packaging table was dropped by an older hand-listed version).
   const clean = blankWorldData();
-  clean.items = data.items || [];
-  clean.components = data.components || [];
-  clean.professions = data.professions || [];
-  clean.skillLevels = data.skillLevels || [];
-  clean.categories = data.categories || [];
-  clean.saleUnits = data.saleUnits || [];
-  clean.itemProfessions = data.itemProfessions || [];
-  clean.categoryGroups = data.categoryGroups || [];
-  clean.rarities = data.rarities || [];
+  for (const key of Object.keys(clean)) {
+    if (Array.isArray(data[key])) clean[key] = data[key];
+  }
+  // Preserve any additional tables the file has that the blank template doesn't
+  // know about yet (forward-compatibility safety net).
+  for (const key of Object.keys(data)) {
+    if (!(key in clean) && Array.isArray(data[key])) clean[key] = data[key];
+  }
+  // Backfill fields that older files may lack.
   for (const c of clean.categories) { if (!('groupId' in c)) c.groupId = null; }
   return { data: clean, name };
 }
@@ -4019,6 +4066,15 @@ async function boot() {
     if (e.target.files && e.target.files[0]) importDataFromFile(e.target.files[0]);
     e.target.value = '';
   });
+  // Ask the browser to make our storage PERSISTENT so it can't be silently
+  // evicted under storage pressure. Without this, mobile browsers may clear
+  // IndexedDB on their own. Best-effort: not all browsers grant or support it.
+  try {
+    if (navigator.storage && navigator.storage.persist) {
+      const already = navigator.storage.persisted ? await navigator.storage.persisted() : false;
+      window._storagePersisted = already || await navigator.storage.persist();
+    }
+  } catch (e) { console.warn('persist() not available', e); }
   const appRoot = document.getElementById('appRoot');
   appRoot.innerHTML = '<div class="empty-state">Loading\u2026</div>';
   try {
