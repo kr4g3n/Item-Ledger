@@ -907,13 +907,16 @@ input[type="number"] {
 .storage-status.warn { background: rgba(122,46,31,0.10); border: 1px solid var(--wax); color: var(--ink); }
 .storage-status .btn { margin-left: 8px; vertical-align: baseline; }
 
+/* Prominent home-screen storage-risk warning */
+
+
 </style>
 </head>
 <body>
 <header class="topbar">
   <div>
     <h1><span class="mark">⚖</span> The Item Ledger</h1>
-    <div class="sub">Works fully offline &middot; your data stays on this device &middot; <span style="opacity:0.45">v54</span></div>
+    <div class="sub">Works fully offline &middot; your data stays on this device &middot; <span style="opacity:0.45">v55</span></div>
   </div>
 </header>
 <div class="world-bar" id="worldBar"></div>
@@ -1570,7 +1573,7 @@ function renderHome(app) {
         ${tile('categoryGroups', 'Category Groups', 'An optional higher tier that bundles related categories together (e.g. a \u201cFood & Drink\u201d group containing Beverages, Meat and Provisions). Categories not assigned to a group appear on their own.', (state.categoryGroups || []).length + ' groups')}
         ${tile('saleUnits', 'Sale Units', 'A sale unit\u2019s type (weight, count or measure) decides how an item\u2019s catalogue price per unit is worked out.', counts.saleUnits + ' units')}
         ${tile('rarities', 'Rarities', 'Rarity levels, ranked from common to mythic. Set a rarity on each item; manage the ladder here.', (state.rarities || []).length + ' rarities')}
-        ${tile('backups', 'Backups', 'In-app snapshots undo mistakes quickly (erased if you clear site data); downloaded backup files are your true off-device safety net.', '')}
+        ${tile('backups', 'Backups', 'In-app snapshots undo mistakes quickly (erased if the browser clears storage); downloaded backup files are your true off-device safety net.', '')}
       </div>
     </div>
   `;
@@ -2931,8 +2934,27 @@ function renderEditorPage(app) {
   const item = draftItem;
 
   const catPlaceholder = `<option value="" ${item.categoryId == null ? 'selected' : ''}>[Select]</option>`;
-  const catOptions = state.categories.slice().sort((a, b) => a.name.localeCompare(b.name))
-    .map(c => `<option value="${c.id}" ${c.id === item.categoryId ? 'selected' : ''}>${escapeHtml(c.name)}</option>`).join('');
+  // Build the category dropdown grouped under its category-group headings
+  // (native <optgroup> gives non-selectable subheadings). Groups A-Z, categories
+  // A-Z within each, then an "Ungrouped" section for categories with no group.
+  const catOptionEl = c => `<option value="${c.id}" ${c.id === item.categoryId ? 'selected' : ''}>${escapeHtml(c.name)}</option>`;
+  const catGroupsSorted = (state.categoryGroups || []).slice().sort((a, b) => a.name.localeCompare(b.name));
+  let catOptions = '';
+  let anyGrouped = false;
+  for (const g of catGroupsSorted) {
+    const inGroup = state.categories.filter(c => c.groupId === g.id).sort((a, b) => a.name.localeCompare(b.name));
+    if (!inGroup.length) continue;
+    anyGrouped = true;
+    catOptions += `<optgroup label="${escapeHtml(g.name)}">${inGroup.map(catOptionEl).join('')}</optgroup>`;
+  }
+  const ungrouped = state.categories.filter(c => c.groupId == null).sort((a, b) => a.name.localeCompare(b.name));
+  if (ungrouped.length) {
+    // Only add an "Ungrouped" heading if something else is grouped; otherwise
+    // there's no point labelling it, so show them bare.
+    catOptions += anyGrouped
+      ? `<optgroup label="Ungrouped">${ungrouped.map(catOptionEl).join('')}</optgroup>`
+      : ungrouped.map(catOptionEl).join('');
+  }
   const unitPlaceholder = `<option value="" ${item.saleUnitId == null ? 'selected' : ''}>[Select]</option>`;
   const unitOptions = state.saleUnits.slice().sort((a, b) => a.name.localeCompare(b.name))
     .map(u => `<option value="${u.id}" ${u.id === item.saleUnitId ? 'selected' : ''}>${escapeHtml(u.name)}</option>`).join('');
