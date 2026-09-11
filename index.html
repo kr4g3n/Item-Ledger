@@ -916,7 +916,7 @@ input[type="number"] {
 <header class="topbar">
   <div>
     <h1><span class="mark">⚖</span> The Item Ledger</h1>
-    <div class="sub">Works fully offline &middot; your data stays on this device &middot; <span style="opacity:0.45">v55</span></div>
+    <div class="sub">Works fully offline &middot; your data stays on this device &middot; <span style="opacity:0.45">v56</span></div>
   </div>
 </header>
 <div class="world-bar" id="worldBar"></div>
@@ -1019,8 +1019,8 @@ async function initStorage() {
       worlds = migrated.worlds;
       meta = { key: 'activeWorldId', value: migrated.activeWorldId };
     } else {
-      // First run ever: seed world
-      const w = makeWorld('My World', JSON.parse(JSON.stringify(SEED_DATA)));
+      // First run ever: start with an empty catalogue (no seed/demo data).
+      const w = makeWorld('Catalogue', blankWorldData());
       await idbPut(STORE_WORLDS, w);
       await idbPut(STORE_META, { key: 'activeWorldId', value: w.id });
       worlds = [w];
@@ -1105,6 +1105,10 @@ function isDataDirtySinceBackup() { return _dataDirtySinceBackup; }
 async function createBackupSnapshot(reason) {
   const w = activeWorld();
   if (!w) return null;
+  // Don't auto-snapshot an empty catalogue (e.g. a fresh start or just after the
+  // browser cleared storage) — that would bury real backups under blank ones.
+  // Manual "Backup now" still works on an empty world if the person insists.
+  if (reason !== 'manual' && (w.data.items || []).length === 0) return null;
   const now = new Date();
   const snap = {
     id: 'backup:' + now.getTime() + ':' + Math.random().toString(36).slice(2, 7),
@@ -4105,10 +4109,39 @@ async function boot() {
     // Backups: take a snapshot on load, then run the auto-backup interval.
     try { await createBackupSnapshot('load'); } catch (e) { console.error('initial snapshot failed', e); }
     startAutoBackup();
+    // If the app opened with an empty catalogue (fresh install, or the browser/OS
+    // cleared storage), offer a one-tap route to import a backup file rather than
+    // leaving the person staring at a blank world wondering what happened.
+    maybeOfferImportOnEmpty();
   } catch (e) {
     console.error(e);
     appRoot.innerHTML = '<div class="empty-state">Could not open local database. If you are in a private/incognito window, try a normal window.</div>';
   }
+}
+
+// Show a prominent recovery prompt when the active world has no items.
+function maybeOfferImportOnEmpty() {
+  const w = activeWorld();
+  const empty = !w || !w.data || (w.data.items || []).length === 0;
+  const onlyOneWorld = library.worlds.length <= 1;
+  if (!empty || !onlyOneWorld) return;
+  if (document.getElementById('emptyImportOverlay')) return;
+  const el = document.createElement('div');
+  el.id = 'emptyImportOverlay';
+  el.className = 'safe-close-overlay';
+  el.innerHTML = `<div class="safe-close-card">
+    <h2>No data found</h2>
+    <p>This catalogue is empty. If you have a backup file on this device, import it to restore your work.</p>
+    <button class="btn btn-moss btn-lg" id="emptyImportBtn">Import a backup file</button>
+    <button class="btn btn-ghost btn-close-keep" id="emptyStartFresh">Start with an empty catalogue</button>
+    <p class="safe-close-hint">Backup files are usually in your Downloads folder.</p>
+  </div>`;
+  document.body.appendChild(el);
+  document.getElementById('emptyStartFresh').addEventListener('click', () => el.remove());
+  document.getElementById('emptyImportBtn').addEventListener('click', () => {
+    el.remove();
+    document.getElementById('importFileInput').click();
+  });
 }
 document.addEventListener('DOMContentLoaded', boot);
 
