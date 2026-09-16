@@ -910,13 +910,20 @@ input[type="number"] {
 /* Prominent home-screen storage-risk warning */
 
 
+/* Category-group heading rows on the Categories screen */
+.data-table tr.cat-group-head td {
+  background: var(--ink); color: var(--paper);
+  font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em;
+  padding: 7px 12px; border-bottom: 1px solid var(--rule);
+}
+
 </style>
 </head>
 <body>
 <header class="topbar">
   <div>
     <h1><span class="mark">⚖</span> The Item Ledger</h1>
-    <div class="sub">Works fully offline &middot; your data stays on this device &middot; <span style="opacity:0.45">v56</span></div>
+    <div class="sub">Works fully offline &middot; your data stays on this device &middot; <span style="opacity:0.45">v58</span></div>
   </div>
 </header>
 <div class="world-bar" id="worldBar"></div>
@@ -1973,8 +1980,34 @@ function deleteSkill(id) {
 
 /* ---------- Categories ---------- */
 function renderCategoriesScreen(app) {
-  const rows = state.categories.slice().sort((a, b) => a.name.localeCompare(b.name));
   const groupName = id => { const g = getCategoryGroup(id); return g ? g.name : '\u2014'; };
+  // Order categories by group (groups A-Z, categories A-Z within each), with
+  // ungrouped categories last. A heading row introduces each group.
+  const groupsSorted = (state.categoryGroups || []).slice().sort((a, b) => a.name.localeCompare(b.name));
+  const catRow = c => {
+    const used = usageCount(it => it.categoryId === c.id);
+    return `<tr>
+      <td class="dt-name">${escapeHtml(c.name)}</td>
+      <td>${escapeHtml(groupName(c.groupId))}</td>
+      <td class="num dt-used">${used}</td>
+      <td class="dt-actions">
+        <button class="btn btn-sm" data-edit-cat="${c.id}">Edit</button>
+        <button class="btn btn-wax btn-sm" data-del-cat="${c.id}">Delete</button>
+      </td>
+    </tr>`;
+  };
+  let bodyRows = '';
+  for (const g of groupsSorted) {
+    const inGroup = state.categories.filter(c => c.groupId === g.id).sort((a, b) => a.name.localeCompare(b.name));
+    if (!inGroup.length) continue;
+    bodyRows += `<tr class="cat-group-head"><td colspan="4">${escapeHtml(g.name)}</td></tr>`;
+    bodyRows += inGroup.map(catRow).join('');
+  }
+  const ungrouped = state.categories.filter(c => c.groupId == null).sort((a, b) => a.name.localeCompare(b.name));
+  if (ungrouped.length) {
+    bodyRows += `<tr class="cat-group-head"><td colspan="4">Ungrouped</td></tr>`;
+    bodyRows += ungrouped.map(catRow).join('');
+  }
   app.innerHTML = `
     ${backBar('Categories')}
     <div class="table-screen">
@@ -1982,18 +2015,7 @@ function renderCategoriesScreen(app) {
       <div class="table-scroll"><table class="data-table">
         <thead><tr><th>Category</th><th>Group</th><th class="num">Items</th><th></th></tr></thead>
         <tbody>
-          ${rows.map(c => {
-            const used = usageCount(it => it.categoryId === c.id);
-            return `<tr>
-              <td class="dt-name">${escapeHtml(c.name)}</td>
-              <td>${escapeHtml(groupName(c.groupId))}</td>
-              <td class="num dt-used">${used}</td>
-              <td class="dt-actions">
-                <button class="btn btn-sm" data-edit-cat="${c.id}">Edit</button>
-                <button class="btn btn-wax btn-sm" data-del-cat="${c.id}">Delete</button>
-              </td>
-            </tr>`;
-          }).join('')}
+          ${bodyRows}
         </tbody>
       </table></div>
     </div>
@@ -3021,7 +3043,7 @@ function renderEditorPage(app) {
           <div class="t-item"><span class="t-label">Gross weight (lbs)</span><input type="number" id="f-grossweight" step="0.00001" placeholder="\u2014 same as net" value="${item.grossWeightLbs != null && item.grossWeightLbs !== '' ? fmtNumInput(item.grossWeightLbs) : ''}" ${(item._packaging && item._packaging.length) ? 'disabled title="Computed from packaging section"' : ''} /></div>
         </div>
         <div class="sale-fields sale-fields-3">
-          <div class="field"><label for="f-baseqty">Number of units produced</label><input type="number" id="f-baseqty" step="0.01" value="${(Number(item.baseMeasureQty) || 0).toFixed(2)}" /></div>
+          <div class="field"><label for="f-baseqty">Number of units produced</label><input type="number" id="f-baseqty" step="0.00001" value="${fmtNumInput(item.baseMeasureQty)}" /></div>
           <div class="field"><label for="f-saleunit">Sale unit</label><select id="f-saleunit"><option value="__add__">+ Add new sale unit\u2026</option>${unitPlaceholder}${unitOptions}</select></div>
           <div class="field"><label for="f-minqty">Minimum sale quantity</label><input type="number" id="f-minqty" step="0.00001" value="${fmtNumInput(item.minSaleQty)}" /></div>
         </div>
@@ -3067,9 +3089,9 @@ function renderEditorPage(app) {
     // For a new item, units-produced defaults to track the weight until the
     // user edits it directly.
     if (item._baseQtyUntouched) {
-      item.baseMeasureQty = Math.round(item.weightLbs * 100) / 100;
+      item.baseMeasureQty = item.weightLbs;
       const bq = document.getElementById('f-baseqty');
-      if (bq) bq.value = item.baseMeasureQty.toFixed(2);
+      if (bq) bq.value = fmtNumInput(item.baseMeasureQty);
     }
     updateDraftTotals();
     // Keep the computed gross field (net + packaging) in step with net.
@@ -3085,7 +3107,7 @@ function renderEditorPage(app) {
     item.saleUnitId = e.target.value === '' ? null : Number(e.target.value); updateDraftTotals(); updateEditorSaveState();
   });
   document.getElementById('f-minqty').addEventListener('input', e => { item.minSaleQty = parseFloat(e.target.value) || 0; updateDraftTotals(); });
-  document.getElementById('f-baseqty').addEventListener('input', e => { item.baseMeasureQty = Math.round((parseFloat(e.target.value) || 0) * 100) / 100; item._baseQtyUntouched = false; updateDraftTotals(); });
+  document.getElementById('f-baseqty').addEventListener('input', e => { item.baseMeasureQty = parseFloat(e.target.value) || 0; item._baseQtyUntouched = false; updateDraftTotals(); });
   document.getElementById('f-markup').addEventListener('input', e => { item.markupAmount = parseFloat(e.target.value) || 0; updateDraftTotals(); });
   document.getElementById('f-desc').addEventListener('input', e => { item.description = e.target.value; });
   document.getElementById('f-craft').addEventListener('input', e => { item.craftingDescription = e.target.value; });
