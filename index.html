@@ -923,7 +923,7 @@ input[type="number"] {
 <header class="topbar">
   <div>
     <h1><span class="mark">⚖</span> The Item Ledger</h1>
-    <div class="sub">Works fully offline &middot; your data stays on this device &middot; <span style="opacity:0.45">v58</span></div>
+    <div class="sub">Works fully offline &middot; your data stays on this device &middot; <span style="opacity:0.45">v59</span></div>
   </div>
 </header>
 <div class="world-bar" id="worldBar"></div>
@@ -1694,12 +1694,16 @@ function renderItemList() {
   // items whose category is missing entirely
   const orphanItems = itemsByCat.get(undefined) || itemsByCat.get(null) || [];
 
-  // On the very first render after load/refresh, start with every category
-  // collapsed (groups + category headings visible, items hidden). After this,
-  // the user's expand/collapse choices are preserved across page switches.
+  // On the very first render after load/refresh, start FULLY collapsed: only the
+  // top-level group headings show, with their categories and items hidden. Loose
+  // (ungrouped) categories collapse to their heading. After this, the user's
+  // expand/collapse choices are preserved across page switches.
   if (!listInitialised) {
     for (const sec of sections) {
-      if (sec.type === 'group') sec.cats.forEach(cid => collapsedCategories.add('cat:' + cid));
+      if (sec.type === 'group') {
+        collapsedGroups.add('grp:' + sec.groupId);
+        sec.cats.forEach(cid => collapsedCategories.add('cat:' + cid));
+      }
     }
     looseCats.forEach(cid => collapsedCategories.add('cat:' + cid));
     if (orphanItems.length) collapsedCategories.add('cat:' + undefined);
@@ -3059,6 +3063,7 @@ function renderEditorPage(app) {
       </div>
 
       <div class="editor-foot-actions">
+        <button class="btn btn-ghost btn-sm" id="editorCopyBtnBottom" title="Copy this item's details as text">Copy as text</button>
         <button class="btn" id="editorCancelBtnBottom">Cancel</button>
         <button class="btn btn-brass" id="editorSaveBtnBottom">Save item</button>
       </div>
@@ -3071,6 +3076,7 @@ function renderEditorPage(app) {
   document.getElementById('editorSaveBtnBottom').addEventListener('click', saveDraft);
   document.getElementById('editorSaveBtn').addEventListener('click', saveDraft);
   document.getElementById('editorCopyBtn').addEventListener('click', copyItemAsText);
+  document.getElementById('editorCopyBtnBottom').addEventListener('click', copyItemAsText);
 
   document.getElementById('itemNameInput').addEventListener('input', e => { item.name = e.target.value; updateEditorSaveState(); });
   document.getElementById('f-category').addEventListener('change', e => {
