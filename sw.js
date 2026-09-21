@@ -7,7 +7,7 @@
    - skipWaiting + clients.claim + a controllerchange reload (in the page) mean
      the update applies without the user manually clearing caches.
    Bump CACHE_VERSION whenever the app files change. */
-const CACHE_VERSION = 'item-ledger-v59';
+const CACHE_VERSION = 'item-ledger-v60';
 const ASSETS = [
   './',
   './index.html',

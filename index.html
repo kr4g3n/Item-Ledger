@@ -492,6 +492,9 @@ input[type="number"] {
 }
 .screen-head .btn-ghost { color: var(--ink-soft); border-color: var(--rule); }
 .screen-head .btn-ghost:hover { background: rgba(0,0,0,0.04); }
+/* Ghost buttons on the cream editor panels (header + footer) need dark text */
+.editor-foot-actions .btn-ghost, .editor-head-actions .btn-ghost { color: var(--ink-soft); border-color: var(--rule); }
+.editor-foot-actions .btn-ghost:hover, .editor-head-actions .btn-ghost:hover { background: rgba(0,0,0,0.04); }
 .screen-head h2 { font-family: var(--font-display); font-size: 22px; font-weight: normal; margin: 0; }
 
 .catalogue-body { display: flex; flex: 1; min-height: 0; height: calc(100vh - 165px); }
@@ -923,7 +926,7 @@ input[type="number"] {
 <header class="topbar">
   <div>
     <h1><span class="mark">⚖</span> The Item Ledger</h1>
-    <div class="sub">Works fully offline &middot; your data stays on this device &middot; <span style="opacity:0.45">v59</span></div>
+    <div class="sub">Works fully offline &middot; your data stays on this device &middot; <span style="opacity:0.45">v60</span></div>
   </div>
 </header>
 <div class="world-bar" id="worldBar"></div>
