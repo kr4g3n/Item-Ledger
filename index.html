@@ -920,19 +920,14 @@ input[type="number"] {
   padding: 7px 12px; border-bottom: 1px solid var(--rule);
 }
 
-/* ---- Future Items screen ---- */
-.fi-scroll { padding-top: 6px; }
-.future-card {
-  background: var(--panel); border: 1px solid var(--rule-light); border-radius: var(--radius);
-  padding: 12px 14px; margin-bottom: 14px;
-}
-.fi-card-head { display: flex; gap: 10px; align-items: center; }
+/* ---- Future Items (list + editor page) ---- */
+.fi-row { cursor: pointer; }
 .fi-name {
-  flex: 1; font-size: 16px; font-weight: 600; padding: 8px 10px;
+  width: 100%; box-sizing: border-box; font-size: 15px; padding: 8px 10px;
   border: 1px solid var(--rule); border-radius: 6px; background: var(--paper); color: var(--ink);
 }
-.fi-notes { margin-top: 12px; }
-.fi-notes-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--ink-faint); margin-bottom: 6px; }
+.fi-notes { margin-top: 18px; }
+.fi-notes-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--ink-faint); margin-bottom: 8px; }
 .fi-note {
   border: 1px solid var(--rule-light); border-radius: 6px; padding: 8px 10px; margin-bottom: 8px;
   background: var(--paper-dim);
@@ -943,7 +938,6 @@ input[type="number"] {
   width: 100%; box-sizing: border-box; resize: vertical; font-family: inherit; font-size: 14px;
   padding: 8px 10px; border: 1px solid var(--rule); border-radius: 6px; background: var(--paper); color: var(--ink);
 }
-.fi-add-note { margin-top: 2px; }
 .fi-note-del { flex: 0 0 auto; }
 
 </style>
@@ -952,7 +946,7 @@ input[type="number"] {
 <header class="topbar">
   <div>
     <h1><span class="mark">⚖</span> The Item Ledger</h1>
-    <div class="sub">Works fully offline &middot; your data stays on this device &middot; <span style="opacity:0.45">v61</span></div>
+    <div class="sub">Works fully offline &middot; your data stays on this device &middot; <span style="opacity:0.45">v62</span></div>
   </div>
 </header>
 <div class="world-bar" id="worldBar"></div>
@@ -1485,6 +1479,8 @@ let currentScreen = 'home';
 let selectedItemId = null;   // highlighted row on the list page
 let draftItem = null;        // working copy while editing (null when not editing)
 let draftIsNew = false;
+let futureDraft = null;      // working copy of a future item while editing its page
+let futureDraftIsNew = false;
 
 function navigate(screen) {
   currentScreen = screen;
@@ -1509,6 +1505,11 @@ window.addEventListener('popstate', function (e) {
     }
     return;
   }
+  if (currentScreen === 'futureEditor') {
+    // leaving the future editor via Back = save and return to the list
+    saveFutureDraft();
+    return;
+  }
   if (currentScreen !== 'home') {
     currentScreen = 'home';
     try { history.pushState({ screen: 'home' }, ''); } catch (_) {}
@@ -1521,7 +1522,7 @@ function render() {
   const app = document.getElementById('appRoot');
   // Reset scroll to top BEFORE painting the editor so a tall form doesn't
   // briefly appear scrolled down.
-  if (currentScreen === 'editor') {
+  if (currentScreen === 'editor' || currentScreen === 'futureEditor') {
     try { window.scrollTo(0, 0); } catch (_) {}
     const m = document.querySelector('.main'); if (m) m.scrollTop = 0;
   }
@@ -1538,6 +1539,7 @@ function render() {
     case 'rarities': renderRaritiesScreen(app); break;
     case 'backups': renderBackupsScreen(app); break;
     case 'futureItems': renderFutureItemsScreen(app); break;
+    case 'futureEditor': renderFutureEditorPage(app); break;
     default: renderHome(app);
   }
   // And again after paint, in case the browser tried to restore a prior position.
@@ -2215,111 +2217,170 @@ function renderSaleUnitsScreen(app) {
 function renderFutureItemsScreen(app) {
   if (!Array.isArray(state.futureItems)) state.futureItems = [];
   if (!Array.isArray(state.editions)) state.editions = [];
-  const fis = state.futureItems;
+  const fis = state.futureItems.slice().sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+
+  const rows = fis.map(fi => {
+    const n = (fi.notes || []).length;
+    return `<tr class="fi-row" data-open="${fi.id}">
+      <td class="dt-name">${escapeHtml(fi.name || '(unnamed)')}</td>
+      <td class="num dt-used">${n}</td>
+      <td class="dt-actions">
+        <button class="btn btn-sm" data-open="${fi.id}">Open</button>
+        <button class="btn btn-wax btn-sm" data-del-fi="${fi.id}">Delete</button>
+      </td>
+    </tr>`;
+  }).join('');
+
+  app.innerHTML = `
+    ${backBar('Future Items')}
+    <div class="table-screen">
+      <div class="table-actions"><button class="btn btn-moss" id="addFutureBtn">+ Add future item</button></div>
+      <div class="table-scroll">
+        ${fis.length ? `<table class="data-table">
+          <thead><tr><th>Item</th><th class="num">Notes</th><th></th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>` : '<p class="screen-note">No future items yet. Add one to jot down ideas you\u2019re not ready to catalogue.</p>'}
+      </div>
+    </div>
+  `;
+  wireBack();
+  document.getElementById('addFutureBtn').addEventListener('click', () => openFutureEditor(null));
+  app.querySelectorAll('[data-open]').forEach(el => el.addEventListener('click', e => {
+    e.stopPropagation();
+    openFutureEditor(Number(e.currentTarget.dataset.open));
+  }));
+  app.querySelectorAll('[data-del-fi]').forEach(btn => btn.addEventListener('click', e => {
+    e.stopPropagation();
+    const id = Number(e.currentTarget.dataset.delFi);
+    const fi = state.futureItems.find(x => x.id === id);
+    if (fi && (fi.name || (fi.notes || []).length) && !confirm('Delete this future item and its notes?')) return;
+    state.futureItems = state.futureItems.filter(x => x.id !== id);
+    saveState();
+    render();
+  }));
+}
+
+// Open the full-page editor for a future item (null = new).
+function openFutureEditor(id) {
+  if (!Array.isArray(state.futureItems)) state.futureItems = [];
+  if (id == null) {
+    futureDraft = { id: nextId(state.futureItems), name: '', notes: [] };
+    futureDraftIsNew = true;
+  } else {
+    const fi = state.futureItems.find(x => x.id === id);
+    if (!fi) return;
+    futureDraft = JSON.parse(JSON.stringify(fi));
+    futureDraftIsNew = false;
+  }
+  navigate('futureEditor');
+}
+
+// Save the future-item draft back to state and return to the list.
+function saveFutureDraft() {
+  if (futureDraft) {
+    // drop entirely empty notes (no edition and no text)
+    futureDraft.notes = (futureDraft.notes || []).filter(n => (n.editionId != null) || (n.text || '').trim() !== '');
+    if (futureDraftIsNew) {
+      state.futureItems.push(futureDraft);
+    } else {
+      const idx = state.futureItems.findIndex(x => x.id === futureDraft.id);
+      if (idx >= 0) state.futureItems[idx] = futureDraft; else state.futureItems.push(futureDraft);
+    }
+    saveState();
+  }
+  futureDraft = null; futureDraftIsNew = false;
+  currentScreen = 'futureItems';
+  try { history.pushState({ screen: 'futureItems' }, ''); } catch (_) {}
+  render();
+}
+
+function cancelFutureEditor() {
+  futureDraft = null; futureDraftIsNew = false;
+  currentScreen = 'futureItems';
+  try { history.pushState({ screen: 'futureItems' }, ''); } catch (_) {}
+  render();
+}
+
+function renderFutureEditorPage(app) {
+  const d = futureDraft;
+  if (!d) { currentScreen = 'futureItems'; renderFutureItemsScreen(app); return; }
 
   const editionOptions = (selectedId) => {
-    // Editions listed by id order (not alphabetical), plus placeholder + add option.
     const eds = state.editions.slice().sort((a, b) => a.id - b.id);
     let html = `<option value="" ${selectedId == null ? 'selected' : ''}>[Edition]</option>`;
     html += eds.map(e => `<option value="${e.id}" ${e.id === selectedId ? 'selected' : ''}>${escapeHtml(e.name)}</option>`).join('');
     html += `<option value="__add__">+ Add edition\u2026</option>`;
     return html;
   };
-
-  const noteRows = (fi, fiIdx) => (fi.notes || []).map((n, nIdx) => `
-    <div class="fi-note" data-fi="${fiIdx}" data-note="${nIdx}">
+  const noteRows = (d.notes || []).map((n, nIdx) => `
+    <div class="fi-note" data-note="${nIdx}">
       <div class="fi-note-head">
-        <select class="fi-edition" data-fi="${fiIdx}" data-note="${nIdx}">${editionOptions(n.editionId)}</select>
-        <button class="row-del fi-note-del" data-fi="${fiIdx}" data-note="${nIdx}" title="Remove note">\u00d7</button>
+        <select class="fi-edition" data-note="${nIdx}">${editionOptions(n.editionId)}</select>
+        <button class="row-del fi-note-del" data-note="${nIdx}" title="Remove note">\u00d7</button>
       </div>
-      <textarea class="fi-note-text" data-fi="${fiIdx}" data-note="${nIdx}" rows="2" placeholder="Note\u2026">${escapeHtml(n.text || '')}</textarea>
-    </div>
-  `).join('');
-
-  const cards = fis.map((fi, i) => `
-    <div class="future-card">
-      <div class="fi-card-head">
-        <input type="text" class="fi-name" data-fi="${i}" value="${escapeHtmlAttr(fi.name || '')}" placeholder="Item name\u2026" />
-        <button class="btn btn-wax btn-sm fi-del" data-fi="${i}">Delete</button>
-      </div>
-      <div class="fi-notes">
-        <div class="fi-notes-label">Notes</div>
-        ${noteRows(fi, i)}
-        <button class="btn btn-sm fi-add-note" data-fi="${i}">+ Add note</button>
-      </div>
+      <textarea class="fi-note-text" data-note="${nIdx}" rows="3" placeholder="Note\u2026">${escapeHtml(n.text || '')}</textarea>
     </div>
   `).join('');
 
   app.innerHTML = `
-    ${backBar('Future Items')}
-    <div class="table-screen">
-      <div class="table-actions"><button class="btn btn-moss" id="addFutureBtn">+ Add future item</button></div>
-      <div class="table-scroll fi-scroll">
-        ${fis.length ? cards : '<p class="screen-note">No future items yet. Add one to jot down ideas you\u2019re not ready to catalogue.</p>'}
+    <div class="editor-page">
+      <div class="screen-head editor-head-bar">
+        <button class="btn btn-ghost btn-sm" id="futureBackBtn">\u2190 List</button>
+        <h2>${futureDraftIsNew ? 'Add future item' : 'Edit future item'}</h2>
+        <div class="editor-head-actions">
+          <button class="btn" id="futureCancelBtn">Cancel</button>
+          <button class="btn btn-brass" id="futureSaveBtn">Save &amp; close</button>
+        </div>
+      </div>
+
+      <div class="field"><label for="fi-name">Item name</label>
+        <input type="text" id="fi-name" value="${escapeHtmlAttr(d.name || '')}" placeholder="Item name\u2026" /></div>
+
+      <div class="fi-notes">
+        <div class="fi-notes-label">Notes</div>
+        <div id="fiNotesWrap">${noteRows || '<p class="screen-note">No notes yet.</p>'}</div>
+        <button class="btn btn-sm" id="fiAddNoteBtn">+ Add note</button>
+      </div>
+
+      <div class="editor-foot-actions">
+        <button class="btn" id="futureCancelBtnBottom">Cancel</button>
+        <button class="btn btn-brass" id="futureSaveBtnBottom">Save &amp; close</button>
       </div>
     </div>
   `;
-  wireBack();
 
-  document.getElementById('addFutureBtn').addEventListener('click', () => {
-    state.futureItems.push({ id: nextId(state.futureItems), name: '', notes: [] });
-    saveState();
+  document.getElementById('futureBackBtn').addEventListener('click', saveFutureDraft);
+  document.getElementById('futureSaveBtn').addEventListener('click', saveFutureDraft);
+  document.getElementById('futureSaveBtnBottom').addEventListener('click', saveFutureDraft);
+  document.getElementById('futureCancelBtn').addEventListener('click', cancelFutureEditor);
+  document.getElementById('futureCancelBtnBottom').addEventListener('click', cancelFutureEditor);
+
+  document.getElementById('fi-name').addEventListener('input', e => { d.name = e.target.value; });
+
+  document.getElementById('fiAddNoteBtn').addEventListener('click', () => {
+    if (!Array.isArray(d.notes)) d.notes = [];
+    d.notes.push({ editionId: null, text: '' });
     render();
   });
 
-  // Item name (live edit, no re-render so focus stays)
-  app.querySelectorAll('.fi-name').forEach(inp => inp.addEventListener('input', e => {
-    const fi = state.futureItems[Number(e.target.dataset.fi)];
-    if (fi) { fi.name = e.target.value; saveState(); }
-  }));
-  // Delete item
-  app.querySelectorAll('.fi-del').forEach(btn => btn.addEventListener('click', e => {
-    const idx = Number(e.target.dataset.fi);
-    const fi = state.futureItems[idx];
-    if (fi && (fi.name || (fi.notes || []).length) && !confirm('Delete this future item and its notes?')) return;
-    state.futureItems.splice(idx, 1);
-    saveState();
-    render();
-  }));
-  // Add note
-  app.querySelectorAll('.fi-add-note').forEach(btn => btn.addEventListener('click', e => {
-    const fi = state.futureItems[Number(e.target.dataset.fi)];
-    if (!fi) return;
-    if (!Array.isArray(fi.notes)) fi.notes = [];
-    fi.notes.push({ editionId: null, text: '' });
-    saveState();
-    render();
-  }));
-  // Note text (live edit)
   app.querySelectorAll('.fi-note-text').forEach(ta => ta.addEventListener('input', e => {
-    const fi = state.futureItems[Number(e.target.dataset.fi)];
-    if (!fi) return;
-    const note = fi.notes[Number(e.target.dataset.note)];
-    if (note) { note.text = e.target.value; saveState(); }
+    const note = d.notes[Number(e.target.dataset.note)];
+    if (note) note.text = e.target.value;
   }));
-  // Remove note
   app.querySelectorAll('.fi-note-del').forEach(btn => btn.addEventListener('click', e => {
-    const fi = state.futureItems[Number(e.currentTarget.dataset.fi)];
-    if (!fi) return;
-    fi.notes.splice(Number(e.currentTarget.dataset.note), 1);
-    saveState();
+    d.notes.splice(Number(e.currentTarget.dataset.note), 1);
     render();
   }));
-  // Edition dropdown
   app.querySelectorAll('.fi-edition').forEach(sel => sel.addEventListener('change', e => {
-    const fiIdx = Number(e.target.dataset.fi), nIdx = Number(e.target.dataset.note);
-    const fi = state.futureItems[fiIdx];
-    if (!fi) return;
-    const note = fi.notes[nIdx];
+    const nIdx = Number(e.target.dataset.note);
+    const note = d.notes[nIdx];
     if (!note) return;
     if (e.target.value === '__add__') {
-      // reset the select back to current until the dialog resolves
       e.target.value = note.editionId == null ? '' : String(note.editionId);
-      openAddEditionDialog(newEd => { note.editionId = newEd.id; saveState(); render(); });
+      openAddEditionDialog(newEd => { note.editionId = newEd.id; render(); });
       return;
     }
     note.editionId = e.target.value === '' ? null : Number(e.target.value);
-    saveState();
   }));
 }
 
