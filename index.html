@@ -920,13 +920,39 @@ input[type="number"] {
   padding: 7px 12px; border-bottom: 1px solid var(--rule);
 }
 
+/* ---- Future Items screen ---- */
+.fi-scroll { padding-top: 6px; }
+.future-card {
+  background: var(--panel); border: 1px solid var(--rule-light); border-radius: var(--radius);
+  padding: 12px 14px; margin-bottom: 14px;
+}
+.fi-card-head { display: flex; gap: 10px; align-items: center; }
+.fi-name {
+  flex: 1; font-size: 16px; font-weight: 600; padding: 8px 10px;
+  border: 1px solid var(--rule); border-radius: 6px; background: var(--paper); color: var(--ink);
+}
+.fi-notes { margin-top: 12px; }
+.fi-notes-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--ink-faint); margin-bottom: 6px; }
+.fi-note {
+  border: 1px solid var(--rule-light); border-radius: 6px; padding: 8px 10px; margin-bottom: 8px;
+  background: var(--paper-dim);
+}
+.fi-note-head { display: flex; gap: 8px; align-items: center; margin-bottom: 6px; }
+.fi-edition { flex: 1; padding: 6px 8px; border: 1px solid var(--rule); border-radius: 6px; background: var(--paper); color: var(--ink); font-size: 13px; }
+.fi-note-text {
+  width: 100%; box-sizing: border-box; resize: vertical; font-family: inherit; font-size: 14px;
+  padding: 8px 10px; border: 1px solid var(--rule); border-radius: 6px; background: var(--paper); color: var(--ink);
+}
+.fi-add-note { margin-top: 2px; }
+.fi-note-del { flex: 0 0 auto; }
+
 </style>
 </head>
 <body>
 <header class="topbar">
   <div>
     <h1><span class="mark">⚖</span> The Item Ledger</h1>
-    <div class="sub">Works fully offline &middot; your data stays on this device &middot; <span style="opacity:0.45">v60</span></div>
+    <div class="sub">Works fully offline &middot; your data stays on this device &middot; <span style="opacity:0.45">v61</span></div>
   </div>
 </header>
 <div class="world-bar" id="worldBar"></div>
@@ -962,7 +988,7 @@ let state = null;
 let currentItemId = null;
 
 function blankWorldData() {
-  return { items: [], components: [], packaging: [], professions: [], skillLevels: [], categories: [], saleUnits: [], itemProfessions: [], categoryGroups: [], rarities: [] };
+  return { items: [], components: [], packaging: [], professions: [], skillLevels: [], categories: [], saleUnits: [], itemProfessions: [], categoryGroups: [], rarities: [], futureItems: [], editions: [] };
 }
 function makeWorld(name, data) {
   return { id: 'w' + Date.now() + Math.floor(Math.random() * 100000), name: name, data: data };
@@ -1066,9 +1092,12 @@ function setActiveWorldInMemory(worldId) {
   const w = library.worlds.find(x => x.id === worldId) || library.worlds[0];
   library.activeWorldId = w.id;
   state = w.data;
-  // Backward-compat: older worlds may lack category groups / rarities
+  // Backward-compat: older worlds may lack category groups / rarities / packaging / future items
   if (!Array.isArray(state.categoryGroups)) state.categoryGroups = [];
   if (!Array.isArray(state.rarities)) state.rarities = [];
+  if (!Array.isArray(state.packaging)) state.packaging = [];
+  if (!Array.isArray(state.futureItems)) state.futureItems = [];
+  if (!Array.isArray(state.editions)) state.editions = [];
   for (const c of state.categories) { if (!('groupId' in c)) c.groupId = null; }
   currentItemId = state.items.length ? state.items[0].id : null;
   invalidateParentIndex();
@@ -1232,6 +1261,7 @@ function packagingOf(itemId) { return (state.packaging || []).filter(p => p.pare
 function professionsOf(itemId) { return state.itemProfessions.filter(ip => ip.itemId === itemId); }
 function usedAsComponentElsewhere(itemId) { return state.components.filter(c => c.componentItemId === itemId); }
 function nextId(arr) { return arr.reduce((m, x) => Math.max(m, x.id), 0) + 1; }
+function getEdition(id) { return (state.editions || []).find(e => e.id === id); }
 
 /* ===================== Cached + incremental calculation engine =====================
    calcResultCache: Map(itemId -> result object), holds the live value of every
@@ -1507,6 +1537,7 @@ function render() {
     case 'saleUnits': renderSaleUnitsScreen(app); break;
     case 'rarities': renderRaritiesScreen(app); break;
     case 'backups': renderBackupsScreen(app); break;
+    case 'futureItems': renderFutureItemsScreen(app); break;
     default: renderHome(app);
   }
   // And again after paint, in case the browser tried to restore a prior position.
@@ -1587,6 +1618,7 @@ function renderHome(app) {
         ${tile('categoryGroups', 'Category Groups', 'An optional higher tier that bundles related categories together (e.g. a \u201cFood & Drink\u201d group containing Beverages, Meat and Provisions). Categories not assigned to a group appear on their own.', (state.categoryGroups || []).length + ' groups')}
         ${tile('saleUnits', 'Sale Units', 'A sale unit\u2019s type (weight, count or measure) decides how an item\u2019s catalogue price per unit is worked out.', counts.saleUnits + ' units')}
         ${tile('rarities', 'Rarities', 'Rarity levels, ranked from common to mythic. Set a rarity on each item; manage the ladder here.', (state.rarities || []).length + ' rarities')}
+        ${tile('futureItems', 'Future Items', 'A holding area for items you\u2019re not ready to catalogue yet \u2014 just a name and edition-tagged notes.', (state.futureItems || []).length + ' items')}
         ${tile('backups', 'Backups', 'In-app snapshots undo mistakes quickly (erased if the browser clears storage); downloaded backup files are your true off-device safety net.', '')}
       </div>
     </div>
@@ -2178,6 +2210,136 @@ function renderSaleUnitsScreen(app) {
   document.getElementById('addUnitBtn').addEventListener('click', () => editUnitDialog(null));
   app.querySelectorAll('[data-edit-unit]').forEach(b => b.addEventListener('click', () => editUnitDialog(Number(b.dataset.editUnit))));
   app.querySelectorAll('[data-del-unit]').forEach(b => b.addEventListener('click', () => deleteUnit(Number(b.dataset.delUnit))));
+}
+
+function renderFutureItemsScreen(app) {
+  if (!Array.isArray(state.futureItems)) state.futureItems = [];
+  if (!Array.isArray(state.editions)) state.editions = [];
+  const fis = state.futureItems;
+
+  const editionOptions = (selectedId) => {
+    // Editions listed by id order (not alphabetical), plus placeholder + add option.
+    const eds = state.editions.slice().sort((a, b) => a.id - b.id);
+    let html = `<option value="" ${selectedId == null ? 'selected' : ''}>[Edition]</option>`;
+    html += eds.map(e => `<option value="${e.id}" ${e.id === selectedId ? 'selected' : ''}>${escapeHtml(e.name)}</option>`).join('');
+    html += `<option value="__add__">+ Add edition\u2026</option>`;
+    return html;
+  };
+
+  const noteRows = (fi, fiIdx) => (fi.notes || []).map((n, nIdx) => `
+    <div class="fi-note" data-fi="${fiIdx}" data-note="${nIdx}">
+      <div class="fi-note-head">
+        <select class="fi-edition" data-fi="${fiIdx}" data-note="${nIdx}">${editionOptions(n.editionId)}</select>
+        <button class="row-del fi-note-del" data-fi="${fiIdx}" data-note="${nIdx}" title="Remove note">\u00d7</button>
+      </div>
+      <textarea class="fi-note-text" data-fi="${fiIdx}" data-note="${nIdx}" rows="2" placeholder="Note\u2026">${escapeHtml(n.text || '')}</textarea>
+    </div>
+  `).join('');
+
+  const cards = fis.map((fi, i) => `
+    <div class="future-card">
+      <div class="fi-card-head">
+        <input type="text" class="fi-name" data-fi="${i}" value="${escapeHtmlAttr(fi.name || '')}" placeholder="Item name\u2026" />
+        <button class="btn btn-wax btn-sm fi-del" data-fi="${i}">Delete</button>
+      </div>
+      <div class="fi-notes">
+        <div class="fi-notes-label">Notes</div>
+        ${noteRows(fi, i)}
+        <button class="btn btn-sm fi-add-note" data-fi="${i}">+ Add note</button>
+      </div>
+    </div>
+  `).join('');
+
+  app.innerHTML = `
+    ${backBar('Future Items')}
+    <div class="table-screen">
+      <div class="table-actions"><button class="btn btn-moss" id="addFutureBtn">+ Add future item</button></div>
+      <div class="table-scroll fi-scroll">
+        ${fis.length ? cards : '<p class="screen-note">No future items yet. Add one to jot down ideas you\u2019re not ready to catalogue.</p>'}
+      </div>
+    </div>
+  `;
+  wireBack();
+
+  document.getElementById('addFutureBtn').addEventListener('click', () => {
+    state.futureItems.push({ id: nextId(state.futureItems), name: '', notes: [] });
+    saveState();
+    render();
+  });
+
+  // Item name (live edit, no re-render so focus stays)
+  app.querySelectorAll('.fi-name').forEach(inp => inp.addEventListener('input', e => {
+    const fi = state.futureItems[Number(e.target.dataset.fi)];
+    if (fi) { fi.name = e.target.value; saveState(); }
+  }));
+  // Delete item
+  app.querySelectorAll('.fi-del').forEach(btn => btn.addEventListener('click', e => {
+    const idx = Number(e.target.dataset.fi);
+    const fi = state.futureItems[idx];
+    if (fi && (fi.name || (fi.notes || []).length) && !confirm('Delete this future item and its notes?')) return;
+    state.futureItems.splice(idx, 1);
+    saveState();
+    render();
+  }));
+  // Add note
+  app.querySelectorAll('.fi-add-note').forEach(btn => btn.addEventListener('click', e => {
+    const fi = state.futureItems[Number(e.target.dataset.fi)];
+    if (!fi) return;
+    if (!Array.isArray(fi.notes)) fi.notes = [];
+    fi.notes.push({ editionId: null, text: '' });
+    saveState();
+    render();
+  }));
+  // Note text (live edit)
+  app.querySelectorAll('.fi-note-text').forEach(ta => ta.addEventListener('input', e => {
+    const fi = state.futureItems[Number(e.target.dataset.fi)];
+    if (!fi) return;
+    const note = fi.notes[Number(e.target.dataset.note)];
+    if (note) { note.text = e.target.value; saveState(); }
+  }));
+  // Remove note
+  app.querySelectorAll('.fi-note-del').forEach(btn => btn.addEventListener('click', e => {
+    const fi = state.futureItems[Number(e.currentTarget.dataset.fi)];
+    if (!fi) return;
+    fi.notes.splice(Number(e.currentTarget.dataset.note), 1);
+    saveState();
+    render();
+  }));
+  // Edition dropdown
+  app.querySelectorAll('.fi-edition').forEach(sel => sel.addEventListener('change', e => {
+    const fiIdx = Number(e.target.dataset.fi), nIdx = Number(e.target.dataset.note);
+    const fi = state.futureItems[fiIdx];
+    if (!fi) return;
+    const note = fi.notes[nIdx];
+    if (!note) return;
+    if (e.target.value === '__add__') {
+      // reset the select back to current until the dialog resolves
+      e.target.value = note.editionId == null ? '' : String(note.editionId);
+      openAddEditionDialog(newEd => { note.editionId = newEd.id; saveState(); render(); });
+      return;
+    }
+    note.editionId = e.target.value === '' ? null : Number(e.target.value);
+    saveState();
+  }));
+}
+
+// Add a new edition ({id, name}); on success calls back with the new edition.
+function openAddEditionDialog(onAdded) {
+  openDialog('Add edition', `
+    <div class="field">
+      <label>Edition name</label>
+      <input type="text" id="newEditionName" placeholder="e.g. 1st draft" autocomplete="off" />
+    </div>
+  `, () => {
+    const name = document.getElementById('newEditionName').value.trim();
+    if (!name) { alert('Please enter an edition name.'); return false; }
+    if (!Array.isArray(state.editions)) state.editions = [];
+    const ed = { id: nextId(state.editions), name };
+    state.editions.push(ed);
+    saveState();
+    if (onAdded) onAdded(ed);
+    return true;
+  }, { requireSelectors: ['newEditionName'] });
 }
 
 function renderBackupsScreen(app) {
