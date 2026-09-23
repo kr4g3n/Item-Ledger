@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content" />
 <title>The Item Ledger</title>
 <link rel="manifest" href="manifest.webmanifest" />
 <meta name="theme-color" content="#2b231c" />
@@ -946,7 +946,7 @@ input[type="number"] {
 <header class="topbar">
   <div>
     <h1><span class="mark">⚖</span> The Item Ledger</h1>
-    <div class="sub">Works fully offline &middot; your data stays on this device &middot; <span style="opacity:0.45">v63</span></div>
+    <div class="sub">Works fully offline &middot; your data stays on this device &middot; <span style="opacity:0.45">v64</span></div>
   </div>
 </header>
 <div class="world-bar" id="worldBar"></div>
@@ -1489,6 +1489,24 @@ function navigate(screen) {
   try { history.pushState({ screen: screen }, ''); } catch (e) { /* ignore */ }
   render();
 }
+
+// When a text field is focused, the on-screen keyboard can cover it. After the
+// keyboard has had time to open, scroll the focused field into view so it stays
+// visible above the keyboard. Works with any scroll container (page or nested).
+document.addEventListener('focusin', function (e) {
+  const el = e.target;
+  if (!el || !el.matches || !el.matches('input, textarea, select')) return;
+  setTimeout(function () {
+    try {
+      // only scroll if the field is now below the visible area (covered)
+      const vh = (window.visualViewport && window.visualViewport.height) || window.innerHeight;
+      const r = el.getBoundingClientRect();
+      if (r.bottom > vh - 8 || r.top < 0) {
+        el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      }
+    } catch (_) {}
+  }, 300);
+});
 
 // Back button: if we're not on the home screen, intercept and go home/back a
 // step instead of exiting. On home, let the default happen (leave the app).
