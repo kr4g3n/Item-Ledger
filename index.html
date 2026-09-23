@@ -946,7 +946,7 @@ input[type="number"] {
 <header class="topbar">
   <div>
     <h1><span class="mark">⚖</span> The Item Ledger</h1>
-    <div class="sub">Works fully offline &middot; your data stays on this device &middot; <span style="opacity:0.45">v62</span></div>
+    <div class="sub">Works fully offline &middot; your data stays on this device &middot; <span style="opacity:0.45">v63</span></div>
   </div>
 </header>
 <div class="world-bar" id="worldBar"></div>
@@ -1712,7 +1712,7 @@ function renderItemList() {
 
   // Organise categories under their group (or ungrouped)
   // Build: groupKey -> { name, cats: [catId...] }; ungrouped uses key '__none__'
-  const groups = (state.categoryGroups || []).slice().sort((a, b) => a.name.localeCompare(b.name));
+  const groups = (state.categoryGroups || []).slice().sort((a, b) => natCompare(a.name, b.name));
   const catsById = new Map(state.categories.map(c => [c.id, c]));
 
   // Determine ordering: each group (alpha), each containing its categories (alpha);
@@ -1721,13 +1721,13 @@ function renderItemList() {
   for (const g of groups) {
     const cats = state.categories.filter(c => c.groupId === g.id)
       .filter(c => itemsByCat.has(c.id))   // only show cats that have (matching) items
-      .sort((a, b) => a.name.localeCompare(b.name))
+      .sort((a, b) => natCompare(a.name, b.name))
       .map(c => c.id);
     if (cats.length) sections.push({ type: 'group', groupId: g.id, name: g.name, cats });
   }
   // ungrouped categories (groupId null/undefined) that have items
   const looseCats = state.categories.filter(c => c.groupId == null && itemsByCat.has(c.id))
-    .sort((a, b) => a.name.localeCompare(b.name)).map(c => c.id);
+    .sort((a, b) => natCompare(a.name, b.name)).map(c => c.id);
   // items whose category is missing entirely
   const orphanItems = itemsByCat.get(undefined) || itemsByCat.get(null) || [];
 
@@ -1755,7 +1755,7 @@ function renderItemList() {
   const renderCatBlock = (catId, indented) => {
     const cat = catsById.get(catId);
     const catName = cat ? cat.name : 'Uncategorised';
-    const items = (itemsByCat.get(catId) || []).slice().sort((a, b) => a.name.localeCompare(b.name));
+    const items = (itemsByCat.get(catId) || []).slice().sort((a, b) => natCompare(a.name, b.name));
     const catKey = 'cat:' + catId;
     const isCollapsed = !searching && collapsedCategories.has(catKey);
     html += `<tr class="list-cat-row"><td colspan="4">
@@ -1894,7 +1894,7 @@ function usageCount(predicate) { return state.items.filter(predicate).length; }
 
 /* ---------- Professions ---------- */
 function renderProfessionsScreen(app) {
-  const rows = state.professions.slice().sort((a, b) => a.name.localeCompare(b.name));
+  const rows = state.professions.slice().sort((a, b) => natCompare(a.name, b.name));
   const skillName = id => { const s = getSkillLevel(id); return s ? s.name : '\u2014'; };
   app.innerHTML = `
     ${backBar('Professions')}
@@ -2024,7 +2024,7 @@ function renderCategoriesScreen(app) {
   const groupName = id => { const g = getCategoryGroup(id); return g ? g.name : '\u2014'; };
   // Order categories by group (groups A-Z, categories A-Z within each), with
   // ungrouped categories last. A heading row introduces each group.
-  const groupsSorted = (state.categoryGroups || []).slice().sort((a, b) => a.name.localeCompare(b.name));
+  const groupsSorted = (state.categoryGroups || []).slice().sort((a, b) => natCompare(a.name, b.name));
   const catRow = c => {
     const used = usageCount(it => it.categoryId === c.id);
     return `<tr>
@@ -2039,12 +2039,12 @@ function renderCategoriesScreen(app) {
   };
   let bodyRows = '';
   for (const g of groupsSorted) {
-    const inGroup = state.categories.filter(c => c.groupId === g.id).sort((a, b) => a.name.localeCompare(b.name));
+    const inGroup = state.categories.filter(c => c.groupId === g.id).sort((a, b) => natCompare(a.name, b.name));
     if (!inGroup.length) continue;
     bodyRows += `<tr class="cat-group-head"><td colspan="4">${escapeHtml(g.name)}</td></tr>`;
     bodyRows += inGroup.map(catRow).join('');
   }
-  const ungrouped = state.categories.filter(c => c.groupId == null).sort((a, b) => a.name.localeCompare(b.name));
+  const ungrouped = state.categories.filter(c => c.groupId == null).sort((a, b) => natCompare(a.name, b.name));
   if (ungrouped.length) {
     bodyRows += `<tr class="cat-group-head"><td colspan="4">Ungrouped</td></tr>`;
     bodyRows += ungrouped.map(catRow).join('');
@@ -2068,7 +2068,7 @@ function renderCategoriesScreen(app) {
 }
 
 function categoryGroupOptions(selectedId) {
-  const groups = (state.categoryGroups || []).slice().sort((a, b) => a.name.localeCompare(b.name));
+  const groups = (state.categoryGroups || []).slice().sort((a, b) => natCompare(a.name, b.name));
   const opts = groups.map(g => `<option value="${g.id}" ${g.id === selectedId ? 'selected' : ''}>${escapeHtml(g.name)}</option>`).join('');
   return `<option value="__add__">+ Add new group\u2026</option><option value="" ${selectedId == null ? 'selected' : ''}>\u2014 None (ungrouped) \u2014</option>${opts}`;
 }
@@ -2125,7 +2125,7 @@ function deleteCat(id) {
 
 /* ---------- Category Groups ---------- */
 function renderCategoryGroupsScreen(app) {
-  const rows = (state.categoryGroups || []).slice().sort((a, b) => a.name.localeCompare(b.name));
+  const rows = (state.categoryGroups || []).slice().sort((a, b) => natCompare(a.name, b.name));
   app.innerHTML = `
     ${backBar('Category Groups')}
     <div class="table-screen">
@@ -2184,7 +2184,7 @@ function deleteGroup(id) {
 
 /* ---------- Sale Units ---------- */
 function renderSaleUnitsScreen(app) {
-  const rows = state.saleUnits.slice().sort((a, b) => a.name.localeCompare(b.name));
+  const rows = state.saleUnits.slice().sort((a, b) => natCompare(a.name, b.name));
   app.innerHTML = `
     ${backBar('Sale Units')}
     <div class="table-screen">
@@ -2217,7 +2217,7 @@ function renderSaleUnitsScreen(app) {
 function renderFutureItemsScreen(app) {
   if (!Array.isArray(state.futureItems)) state.futureItems = [];
   if (!Array.isArray(state.editions)) state.editions = [];
-  const fis = state.futureItems.slice().sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+  const fis = state.futureItems.slice().sort((a, b) => natCompare(a.name, b.name));
 
   const rows = fis.map(fi => {
     const n = (fi.notes || []).length;
@@ -3194,16 +3194,16 @@ function renderEditorPage(app) {
   // (native <optgroup> gives non-selectable subheadings). Groups A-Z, categories
   // A-Z within each, then an "Ungrouped" section for categories with no group.
   const catOptionEl = c => `<option value="${c.id}" ${c.id === item.categoryId ? 'selected' : ''}>${escapeHtml(c.name)}</option>`;
-  const catGroupsSorted = (state.categoryGroups || []).slice().sort((a, b) => a.name.localeCompare(b.name));
+  const catGroupsSorted = (state.categoryGroups || []).slice().sort((a, b) => natCompare(a.name, b.name));
   let catOptions = '';
   let anyGrouped = false;
   for (const g of catGroupsSorted) {
-    const inGroup = state.categories.filter(c => c.groupId === g.id).sort((a, b) => a.name.localeCompare(b.name));
+    const inGroup = state.categories.filter(c => c.groupId === g.id).sort((a, b) => natCompare(a.name, b.name));
     if (!inGroup.length) continue;
     anyGrouped = true;
     catOptions += `<optgroup label="${escapeHtml(g.name)}">${inGroup.map(catOptionEl).join('')}</optgroup>`;
   }
-  const ungrouped = state.categories.filter(c => c.groupId == null).sort((a, b) => a.name.localeCompare(b.name));
+  const ungrouped = state.categories.filter(c => c.groupId == null).sort((a, b) => natCompare(a.name, b.name));
   if (ungrouped.length) {
     // Only add an "Ungrouped" heading if something else is grouped; otherwise
     // there's no point labelling it, so show them bare.
@@ -3212,7 +3212,7 @@ function renderEditorPage(app) {
       : ungrouped.map(catOptionEl).join('');
   }
   const unitPlaceholder = `<option value="" ${item.saleUnitId == null ? 'selected' : ''}>[Select]</option>`;
-  const unitOptions = state.saleUnits.slice().sort((a, b) => a.name.localeCompare(b.name))
+  const unitOptions = state.saleUnits.slice().sort((a, b) => natCompare(a.name, b.name))
     .map(u => `<option value="${u.id}" ${u.id === item.saleUnitId ? 'selected' : ''}>${escapeHtml(u.name)}</option>`).join('');
   const rarityPlaceholder = `<option value="" ${item.rarityId == null ? 'selected' : ''}>[Select]</option>`;
   const rarityOptions = raritiesByRank()
@@ -3382,12 +3382,12 @@ function updateEditorSaveState() {
 function refreshCategorySelect() {
   const sel = document.getElementById('f-category');
   if (!sel) return;
-  const opts = state.categories.slice().sort((a, b) => a.name.localeCompare(b.name))
+  const opts = state.categories.slice().sort((a, b) => natCompare(a.name, b.name))
     .map(c => `<option value="${c.id}" ${c.id === draftItem.categoryId ? 'selected' : ''}>${escapeHtml(c.name)}</option>`).join('');
   sel.innerHTML = '<option value="__add__">+ Add new category\u2026</option>' + opts;
 }
 function addNewCategoryInline() {
-  const groups = (state.categoryGroups || []).slice().sort((a, b) => a.name.localeCompare(b.name));
+  const groups = (state.categoryGroups || []).slice().sort((a, b) => natCompare(a.name, b.name));
   const groupOpts = groups.map(g => `<option value="${g.id}">${escapeHtml(g.name)}</option>`).join('');
   openDialog('Add category', `
     <div class="field"><label>Category name</label><input type="text" id="dlg-name" /></div>
@@ -3445,7 +3445,7 @@ function addNewCategoryInline() {
 function refreshSaleUnitSelect() {
   const sel = document.getElementById('f-saleunit');
   if (!sel) return;
-  const opts = state.saleUnits.slice().sort((a, b) => a.name.localeCompare(b.name))
+  const opts = state.saleUnits.slice().sort((a, b) => natCompare(a.name, b.name))
     .map(u => `<option value="${u.id}" ${u.id === draftItem.saleUnitId ? 'selected' : ''}>${escapeHtml(u.name)}</option>`).join('');
   sel.innerHTML = '<option value="__add__">+ Add new sale unit\u2026</option>' + opts;
 }
@@ -3711,7 +3711,7 @@ function renderDraftAddComponentRow() {
 }
 
 function openAddComponentDialog() {
-  const others = state.items.filter(i => i.id !== draftItem.id).slice().sort((a, b) => a.name.localeCompare(b.name));
+  const others = state.items.filter(i => i.id !== draftItem.id).slice().sort((a, b) => natCompare(a.name, b.name));
   openDialog('Add component', `
     <div class="field">
       <label>Component</label>
@@ -3790,7 +3790,7 @@ function openChangeComponentDialog(idx) {
   const row = draftItem._components[idx];
   if (!row) return;
   const current = getItem(row.componentItemId);
-  const others = state.items.filter(i => i.id !== draftItem.id).slice().sort((a, b) => a.name.localeCompare(b.name));
+  const others = state.items.filter(i => i.id !== draftItem.id).slice().sort((a, b) => natCompare(a.name, b.name));
   openDialog('Change component', `
     <p class="dlg-hint">Currently: <strong>${escapeHtml(current ? current.name : 'Unknown')}</strong>. Pick a different item \u2014 the quantity (${fmtNum(row.quantity)}) is kept.</p>
     <div class="field">
@@ -3986,7 +3986,7 @@ function renderDraftAddPackagingRow() {
 }
 
 function openAddPackagingDialog() {
-  const others = state.items.filter(i => i.id !== draftItem.id).slice().sort((a, b) => a.name.localeCompare(b.name));
+  const others = state.items.filter(i => i.id !== draftItem.id).slice().sort((a, b) => natCompare(a.name, b.name));
   openDialog('Add container', `
     <div class="field">
       <label>Container</label>
@@ -4062,7 +4062,7 @@ function openChangePackagingDialog(idx) {
   const row = draftItem._packaging[idx];
   if (!row) return;
   const current = getItem(row.containerItemId);
-  const others = state.items.filter(i => i.id !== draftItem.id).slice().sort((a, b) => a.name.localeCompare(b.name));
+  const others = state.items.filter(i => i.id !== draftItem.id).slice().sort((a, b) => natCompare(a.name, b.name));
   openDialog('Change container', `
     <p class="dlg-hint">Currently: <strong>${escapeHtml(current ? current.name : 'Unknown')}</strong>. Pick a different item \u2014 the quantities are kept.</p>
     <div class="field">
@@ -4248,7 +4248,7 @@ function renderDraftAddProfessionRow() {
 }
 
 function openAddLabourDialog() {
-  const profs = state.professions.slice().sort((a, b) => a.name.localeCompare(b.name));
+  const profs = state.professions.slice().sort((a, b) => natCompare(a.name, b.name));
   openDialog('Add labour', `
     <div class="field">
       <label>Profession</label>
@@ -4287,7 +4287,7 @@ function openChangeProfessionDialog(idx) {
   const row = draftItem._professions[idx];
   if (!row) return;
   const current = getProfession(row.professionId);
-  const profs = state.professions.slice().sort((a, b) => a.name.localeCompare(b.name));
+  const profs = state.professions.slice().sort((a, b) => natCompare(a.name, b.name));
   openDialog('Change profession', `
     <p class="dlg-hint">Currently: <strong>${escapeHtml(current ? current.name : 'Unknown')}</strong>. Pick a different profession \u2014 workers (${fmtNum(row.numWorkers)}) and days (${fmtNum(row.craftingDays)}) are kept.</p>
     <div class="field">
@@ -4335,6 +4335,12 @@ function updateDraftTotals() {
 }
 
 /* ===================== Utilities ===================== */
+// Natural (human) sort: compares embedded numbers as numbers, so "Rod 8" sorts
+// before "Rod 10" instead of after it. Case-insensitive on the text parts.
+function natCompare(a, b) {
+  return String(a == null ? '' : a).localeCompare(String(b == null ? '' : b), undefined, { numeric: true, sensitivity: 'base' });
+}
+
 function escapeHtml(s) {
   return String(s == null ? '' : s).replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
 }
